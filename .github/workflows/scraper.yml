@@ -2,7 +2,7 @@ name: Scraper Diputados Diario
 
 on:
   schedule:
-    - cron: '30 13 * * *'
+    - cron: '38 16 * * *'
   workflow_dispatch:
 
 jobs:
