@@ -1,7 +1,7 @@
 import os
 import json
-import pandas as pd
 import time
+import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from selenium import webdriver
@@ -14,6 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 
 class ScrapearDiputados:
+
     def __init__(self):
         print("Inicializando robot...")
         options = Options()
@@ -21,19 +22,19 @@ class ScrapearDiputados:
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--window-size=1920,1080')
-        
+
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
         self.data = []
-    
+
     def get_expediente(self, soup):
-       try:
-           spans = soup.find_all('span')
-           for s in spans:
-               if "Expediente" in s.text:
-                   return s.text.split(":")[-1].strip()
-           return "S/D"
-       except: return "S/D"
-    
+        try:
+            spans = soup.find_all('span')
+            for s in spans:
+                if "Expediente" in s.text:
+                    return s.text.split(":")[-1].strip()
+            return "S/D"
+        except: return "S/D"
+
     def get_autor_info(self, soup):
         autor = "S/D"; bloque = "S/D"; provincia = "S/D"
         try:
@@ -122,23 +123,25 @@ class ScrapearDiputados:
         return pd.DataFrame(self.data)
 
 if __name__ == "__main__":
+    
     url_objetivo = "https://www.diputados.gov.ar/proyectos/"
     bot = ScrapearDiputados()
     df_resultado = bot.scrape(url_objetivo)
 
-    print("Autenticando con Google (Service Account)...")
-    
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    
-    json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
-    creds = Credentials.from_service_account_info(json_creds, scopes=scopes)
-    gc = gspread.authorize(creds)
+    print("-" * 50)
+    print("Iniciando proceso de sincronización con Google Sheets...")
 
-    URL_PLANILLA = "https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?usp=sharing"
-    NOMBRE_HOJA = "Proyectos"
+    if 'GCP_CREDENTIALS' in os.environ:
+        json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(json_creds, scopes=scopes)
+        gc = gspread.authorize(creds)
+    else:
+        print("ERROR: No se encontró la variable de entorno GCP_CREDENTIALS")
+        exit(1)
+
+    URL_PLANILLA = "https://docs.google.com/spreadsheets/d/1P0Z8phkksBeCLzn-x5UF5iof7ooH4tKrEcbwBDBhAPc/edit"
+    NOMBRE_HOJA = "Proyectos Scraping"
 
     try:
         print(f"Abriendo planilla...")
@@ -147,63 +150,91 @@ if __name__ == "__main__":
 
         datos_existentes = sheet.get_all_records()
         df_sheet = pd.DataFrame(datos_existentes)
-        
+
         filas_nuevas = []
         contador_actualizados = 0
+        contador_omitidos = 0
 
+        proximo_id = 1
         if not df_sheet.empty and 'ID' in df_sheet.columns:
-            ids_numericos = pd.to_numeric(df_sheet['ID'], errors='coerce')
-            max_id = ids_numericos.fillna(0).max()
-            proximo_id = int(max_id) + 1
-        else:
-            proximo_id = 1
+            max_id_numeric = 0
+            max_id_pl_format = 0
+
+            pl_ids_series = df_sheet['ID'][df_sheet['ID'].astype(str).str.startswith('PL', na=False)]
+            if not pl_ids_series.empty:
+                numeric_parts = pl_ids_series.str.replace('PL', '', regex=False).astype(str).str.extract(r'^(\d+)$', expand=False)
+                max_pl_id_val = pd.to_numeric(numeric_parts, errors='coerce').max()
+                if pd.notna(max_pl_id_val): max_id_pl_format = int(max_pl_id_val)
+
+            numeric_ids_series = df_sheet['ID'][~df_sheet['ID'].astype(str).str.startswith('PL', na=False)]
+            if not numeric_ids_series.empty:
+                max_numeric_id_val = pd.to_numeric(numeric_ids_series, errors='coerce').max()
+                if pd.notna(max_numeric_id_val): max_id_numeric = int(max_numeric_id_val)
+
+            proximo_id = max(max_id_numeric, max_id_pl_format) + 1
 
         if df_resultado is not None and not df_resultado.empty:
+
+            print(f"Analizando {len(df_resultado)} proyectos scrapeados...")
+
             for index, row in df_resultado.iterrows():
                 expediente_nuevo = str(row['Expediente']).strip()
                 fecha_nueva = str(row['Fecha de inicio']).strip()
-                
+
                 match = pd.DataFrame()
                 if not df_sheet.empty:
                     match = df_sheet[df_sheet['Expediente'].astype(str) == expediente_nuevo]
 
                 if match.empty:
-                    row['ID'] = proximo_id
-                    proximo_id += 1
+                    formatted_id = f"PL{proximo_id:03d}"
+
                     fila_ordenada = [
-                        row['ID'], 'Diputados', row['Expediente'], row['Autor'], 
-                        row['Fecha de inicio'], row['Proyecto'], row['Comisiones'], 
+                        formatted_id, 'Diputados', row['Expediente'], row['Autor'],
+                        row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
                         '', '', row['Partido Político'], row['Provincia'], ''
                     ]
                     fila_limpia = [str(x) if pd.notna(x) else "" for x in fila_ordenada]
                     filas_nuevas.append(fila_limpia)
+                    proximo_id += 1
+
                 else:
                     idx_existente = match.index[0]
                     fecha_existente = str(match.iloc[0]['Fecha de inicio']).strip()
-                    id_existente = match.iloc[0]['ID']
+                    id_existente = str(match.iloc[0]['ID']).strip() 
 
                     if fecha_nueva != fecha_existente:
-                        print(f"Actualizando {expediente_nuevo}...")
+                        print(f"Actualizando Exp: {expediente_nuevo} (Fecha anterior: {fecha_existente} -> Nueva: {fecha_nueva})")
+                        
                         fila_sheet_num = idx_existente + 2
+
                         fila_actualizada = [
-                            id_existente, 'Diputados', row['Expediente'], row['Autor'], 
-                            row['Fecha de inicio'], row['Proyecto'], row['Comisiones'], 
-                            match.iloc[0]['Estado'], match.iloc[0]['Probabilidad'], 
+                            id_existente, 'Diputados', row['Expediente'], row['Autor'],
+                            row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
+                            match.iloc[0]['Estado'], match.iloc[0]['Probabilidad'],
                             row['Partido Político'], row['Provincia'], match.iloc[0]['Observaciones']
                         ]
                         fila_limpia = [str(x) if pd.notna(x) else "" for x in fila_actualizada]
+
                         rango = f"A{fila_sheet_num}:L{fila_sheet_num}"
                         sheet.update(range_name=rango, values=[fila_limpia])
                         contador_actualizados += 1
+                    else:
+                        contador_omitidos += 1
 
             if filas_nuevas:
-                print(f"Cargando {len(filas_nuevas)} filas nuevas...")
+                print(f"Cargando {len(filas_nuevas)} proyectos NUEVOS...")
                 sheet.append_rows(filas_nuevas)
-            
-            print(f"Proceso terminado. Nuevos: {len(filas_nuevas)}, Actualizados: {contador_actualizados}")
+
+            print("-" * 50)
+            print("RESUMEN DE OPERACIÓN:")
+            print(f"Nuevos cargados: {len(filas_nuevas)}")
+            print(f"Actualizados: {contador_actualizados}")
+            print(f"Omitidos (ya estaban en la planilla): {contador_omitidos}")
+            print("-" * 50)
+
         else:
-            print("No se encontraron datos en el scraping.")
+            print("El scraping no trajo datos o hubo un error.")
 
     except Exception as e:
-        print(f"Error crítico: {e}")
+        print(f"Ocurrió un error en la carga: {e}")
         exit(1)
