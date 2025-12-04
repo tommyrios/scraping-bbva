@@ -140,8 +140,8 @@ if __name__ == "__main__":
         print("ERROR: No se encontró la variable de entorno GCP_CREDENTIALS")
         exit(1)
 
-    URL_PLANILLA = "https://docs.google.com/spreadsheets/d/1P0Z8phkksBeCLzn-x5UF5iof7ooH4tKrEcbwBDBhAPc/edit"
-    NOMBRE_HOJA = "Proyectos Scraping"
+    URL_PLANILLA = "https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?gid=0#gid=0"
+    NOMBRE_HOJA = "Proyectos"
 
     try:
         print(f"Abriendo planilla...")
