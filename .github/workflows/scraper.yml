@@ -30,4 +30,6 @@ jobs:
       - name: Ejecutar Scraper
         env:
           GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+          WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}    
+          WHATSAPP_API_KEY: ${{ secrets.WHATSAPP_API_KEY }}  
         run: python main.py
