@@ -13,6 +13,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select  
 from bs4 import BeautifulSoup
 
 class ScrapearDiputados:
@@ -90,12 +91,24 @@ class ScrapearDiputados:
 
         try:
             wait = WebDriverWait(self.driver, 20)
+            
+            dropdown = wait.until(EC.presence_of_element_located((By.ID, "strCantPagina")))
+            
+            select = Select(dropdown)
+            select.select_by_value("100") 
+            
             print("Buscando botón...")
             boton = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@value='Buscar']")))
+            
+            time.sleep(2) 
+            
             self.driver.execute_script("arguments[0].click();", boton)
-            time.sleep(8)
+            
+            print("Esperando resultados...")
+            time.sleep(10) 
+            
         except Exception as e:
-            print(f"Error buscando: {e}")
+            print(f"Error interactuando con la página: {e}")
             self.driver.quit()
             return None
 
