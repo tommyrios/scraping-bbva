@@ -131,8 +131,11 @@ def enviar_whatsapp(mensaje):
             apikey = os.environ['WHATSAPP_API_KEY']
             texto_codificado = urllib.parse.quote(mensaje)
             url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={texto_codificado}&apikey={apikey}"
-            urllib.request.urlopen(url)
-            print("Mensaje de WhatsApp enviado.")
+            
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req) as response:
+                print(f"Estado WhatsApp: {response.read().decode('utf-8')}")
+                
         except Exception as e:
             print(f"Error enviando WhatsApp: {e}")
     else:
