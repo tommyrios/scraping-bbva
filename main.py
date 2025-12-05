@@ -13,7 +13,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select  
+from selenium.webdriver.support.ui import Select
 from bs4 import BeautifulSoup
 
 class ScrapearDiputados:
@@ -92,16 +92,14 @@ class ScrapearDiputados:
         try:
             wait = WebDriverWait(self.driver, 20)
             
+            print("Configurando filtro a 100 resultados...")
             dropdown = wait.until(EC.presence_of_element_located((By.ID, "strCantPagina")))
-            
             select = Select(dropdown)
-            select.select_by_value("100") 
-            
+            select.select_by_value("100")
+
             print("Buscando botón...")
             boton = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@value='Buscar']")))
-            
-            time.sleep(2) 
-            
+            time.sleep(1) 
             self.driver.execute_script("arguments[0].click();", boton)
             
             print("Esperando resultados...")
@@ -162,6 +160,10 @@ if __name__ == "__main__":
         url_objetivo = "https://www.diputados.gov.ar/proyectos/"
         bot = ScrapearDiputados()
         df_resultado = bot.scrape(url_objetivo)
+
+        if df_resultado is not None and not df_resultado.empty:
+            df_resultado = df_resultado.iloc[::-1]
+            print("Orden invertido: Procesando desde el más antiguo de la lista hacia el más nuevo.")
 
         print("-" * 50)
         print("Iniciando proceso de sincronización con Google Sheets...")
@@ -265,17 +267,22 @@ if __name__ == "__main__":
             print(f"Omitidos: {contador_omitidos}")
             print("-" * 50)
             
-            msg_final = f"Resumen Ejecucion Diputados: Nuevos: {len(filas_nuevas)}. Actualizados: {contador_actualizados}. Omitidos: {contador_omitidos}."
+            msg_final = (
+                f"🤖 *Reporte Diputados*\n\n"
+                f"✅ *Nuevos:* {len(filas_nuevas)}\n"
+                f"🔄 *Actualizados:* {contador_actualizados}\n"
+                f"⏭️ *Omitidos:* {contador_omitidos}"
+            )
 
         else:
-            msg = "El scraping no trajo datos."
+            msg = "El scraping no trajo datos nuevos."
             print(msg)
-            msg_final = f"Alerta Diputados: {msg}"
+            msg_final = f"⚠️ *Alerta Diputados*\n\n{msg}"
 
         enviar_whatsapp(msg_final)
 
     except Exception as e:
-        err_msg = f"Error Critico Diputados: {str(e)}"
+        err_msg = f"❌ *Error Crítico Diputados*\n\n{str(e)}"
         print(err_msg)
         enviar_whatsapp(err_msg)
         exit(1)
