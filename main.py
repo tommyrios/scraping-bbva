@@ -3,6 +3,8 @@ import json
 import time
 import pandas as pd
 import gspread
+import urllib.request
+import urllib.parse
 from google.oauth2.service_account import Credentials
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -122,28 +124,43 @@ class ScrapearDiputados:
         self.driver.quit()
         return pd.DataFrame(self.data)
 
+def enviar_whatsapp(mensaje):
+    if 'WHATSAPP_PHONE' in os.environ and 'WHATSAPP_API_KEY' in os.environ:
+        try:
+            phone = os.environ['WHATSAPP_PHONE']
+            apikey = os.environ['WHATSAPP_API_KEY']
+            texto_codificado = urllib.parse.quote(mensaje)
+            url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={texto_codificado}&apikey={apikey}"
+            urllib.request.urlopen(url)
+            print("Mensaje de WhatsApp enviado.")
+        except Exception as e:
+            print(f"Error enviando WhatsApp: {e}")
+    else:
+        print("Credenciales de WhatsApp no configuradas.")
+
 if __name__ == "__main__":
     
-    url_objetivo = "https://www.diputados.gov.ar/proyectos/"
-    bot = ScrapearDiputados()
-    df_resultado = bot.scrape(url_objetivo)
-
-    print("-" * 50)
-    print("Iniciando proceso de sincronización con Google Sheets...")
-
-    if 'GCP_CREDENTIALS' in os.environ:
-        json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(json_creds, scopes=scopes)
-        gc = gspread.authorize(creds)
-    else:
-        print("ERROR: No se encontró la variable de entorno GCP_CREDENTIALS")
-        exit(1)
-
-    URL_PLANILLA = "https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?gid=0#gid=0"
-    NOMBRE_HOJA = "Proyectos"
-
+    msg_final = ""
+    
     try:
+        url_objetivo = "https://www.diputados.gov.ar/proyectos/"
+        bot = ScrapearDiputados()
+        df_resultado = bot.scrape(url_objetivo)
+
+        print("-" * 50)
+        print("Iniciando proceso de sincronización con Google Sheets...")
+
+        if 'GCP_CREDENTIALS' in os.environ:
+            json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
+            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+            creds = Credentials.from_service_account_info(json_creds, scopes=scopes)
+            gc = gspread.authorize(creds)
+        else:
+            raise Exception("No se encontró la variable de entorno GCP_CREDENTIALS")
+
+        URL_PLANILLA = "https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?gid=0#gid=0"
+        NOMBRE_HOJA = "Proyectos"
+
         print(f"Abriendo planilla...")
         wb = gc.open_by_url(URL_PLANILLA)
         sheet = wb.worksheet(NOMBRE_HOJA)
@@ -203,7 +220,7 @@ if __name__ == "__main__":
                     id_existente = str(match.iloc[0]['ID']).strip() 
 
                     if fecha_nueva != fecha_existente:
-                        print(f"Actualizando Exp: {expediente_nuevo} (Fecha anterior: {fecha_existente} -> Nueva: {fecha_nueva})")
+                        print(f"Actualizando Exp: {expediente_nuevo}")
                         
                         fila_sheet_num = idx_existente + 2
 
@@ -229,12 +246,20 @@ if __name__ == "__main__":
             print("RESUMEN DE OPERACIÓN:")
             print(f"Nuevos cargados: {len(filas_nuevas)}")
             print(f"Actualizados: {contador_actualizados}")
-            print(f"Omitidos (ya estaban en la planilla): {contador_omitidos}")
+            print(f"Omitidos: {contador_omitidos}")
             print("-" * 50)
+            
+            msg_final = f"Resumen Ejecucion Diputados: Nuevos: {len(filas_nuevas)}. Actualizados: {contador_actualizados}. Omitidos: {contador_omitidos}."
 
         else:
-            print("El scraping no trajo datos o hubo un error.")
+            msg = "El scraping no trajo datos."
+            print(msg)
+            msg_final = f"Alerta Diputados: {msg}"
+
+        enviar_whatsapp(msg_final)
 
     except Exception as e:
-        print(f"Ocurrió un error en la carga: {e}")
+        err_msg = f"Error Critico Diputados: {str(e)}"
+        print(err_msg)
+        enviar_whatsapp(err_msg)
         exit(1)
