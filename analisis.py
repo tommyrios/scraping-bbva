@@ -6,7 +6,7 @@ class AnalistaLegislativo:
         self.api_key = os.environ.get('GEMINI_API_KEY')
         if self.api_key:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel('gemini-pro')
         else:
             self.model = None
 
