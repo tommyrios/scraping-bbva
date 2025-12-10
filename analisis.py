@@ -10,26 +10,18 @@ class AnalistaLegislativo:
             try:
                 genai.configure(api_key=self.api_key)
                 
-                # --- PASO 1: DIAGNÓSTICO Y SELECCIÓN AUTOMÁTICA ---
                 print(f"Versión de librería genai: {genai.__version__}")
                 
-                # Listamos los modelos que soportan generar texto
                 modelos_disponibles = []
                 for m in genai.list_models():
                     if 'generateContent' in m.supported_generation_methods:
                         modelos_disponibles.append(m.name)
                 
-                print(f"Modelos encontrados: {modelos_disponibles}")
-                
-                # Lógica de selección de modelo (Prioridad: Flash > Pro > Cualquiera)
                 modelo_a_usar = ""
-                
-                # Buscamos preferidos
                 if 'models/gemini-1.5-flash' in modelos_disponibles:
                     modelo_a_usar = 'models/gemini-1.5-flash'
                 elif 'models/gemini-pro' in modelos_disponibles:
                     modelo_a_usar = 'models/gemini-pro'
-                # Si no están los famosos, agarramos el primero de la lista que sirva
                 elif modelos_disponibles:
                     modelo_a_usar = modelos_disponibles[0]
                 else:
@@ -51,40 +43,35 @@ class AnalistaLegislativo:
         Retorna un string con el análisis hecho por Gemini.
         """
         if not self.model:
-            return "⚠️ No se pudo configurar el modelo de IA (Ver logs)."
+            return "⚠️ No se pudo configurar el modelo de IA."
 
         if not lista_proyectos:
             return "No hay proyectos nuevos para analizar."
 
-        # 1. Preparamos el texto
         texto_proyectos = ""
         for p in lista_proyectos:
-            # Indices: 2=Expediente, 3=Autor, 5=Título/Proyecto
             texto_proyectos += f"- Exp: {p[2]} | Autor: {p[3]} | Título: {p[5]}\n"
 
-        # 2. El Prompt
         prompt = f"""
         Eres un Analista de Riesgo Regulatorio para el Banco BBVA Argentina.
-        Analiza la siguiente lista de nuevos proyectos de ley ingresados en Diputados:
-
+        Tu misión es filtrar los siguientes proyectos de ley nuevos y generar un resumen EJECUTIVO y MUY BREVE para WhatsApp.
+        
+        Lista de proyectos:
         {texto_proyectos}
 
         Instrucciones:
-        1. Identifica temas recurrentes.
-        2. Busca palabras clave de riesgo bancario: Tasas, BCRA, Tarjetas, Créditos, Fintech, Deudores, Impuestos.
-        3. Si un proyecto impacta al banco, márcalo con 🚨.
-        4. Si son irrelevantes, pon: "🟢 Sin impacto regulatorio relevante."
-
-        Formato de respuesta (para WhatsApp):
-        - Usa emojis.
-        - Máximo 200 palabras.
-        - Directo al grano.
+        1. SOLO menciona proyectos que representen un riesgo u oportunidad real para el negocio bancario (Créditos, BCRA, Tarjetas, Impuestos, Datos, Hipotecas).
+        2. Si un proyecto es crítico, usa 🚨 y resume el impacto en 1 línea.
+        3. Agrupa el resto de proyectos irrelevantes (homenajes, declaraciones, educación) en una sola frase final genérica.
+        4. NO uses introducciones como "Hola equipo" ni saludos. Sé directo.
+        
+        Tu respuesta debe tener menos de 800 caracteres para que no se corte el mensaje.
         """
 
         try:
-            # Generamos la respuesta
             response = self.model.generate_content(prompt)
-            return f"\n🧠 *Análisis IA ({self.model.model_name}):*\n{response.text}"
+            
+            return f"\n🧠 *Análisis IA:*\n{response.text}"
 
         except Exception as e:
             print(f"DEBUG IA: {e}") 
