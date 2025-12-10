@@ -5,6 +5,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from notifications import MensajeSender
 from diputados import ScrapearDiputados
+from analisis import AnalistaLegislativo
 
 if __name__ == "__main__":
     
@@ -108,11 +109,16 @@ if __name__ == "__main__":
                 print(f"Cargando {len(filas_nuevas)} proyectos NUEVOS...")
                 sheet.append_rows(filas_nuevas)
 
+            print("Solicitando análisis a Gemini...")
+            analista = AnalistaLegislativo()
+            texto_analisis = analista.analizar_proyectos(filas_nuevas)
+
             msg_final = (
                 f"🤖 *Reporte Diputados*\n\n"
                 f"✅ *Nuevos:* {len(filas_nuevas)}\n"
                 f"🔄 *Actualizados:* {contador_actualizados}\n"
-                f"⏭️ *Omitidos:* {contador_omitidos}"
+                f"⏭️ *Omitidos:* {contador_omitidos}\n"
+                f"{texto_analisis}"
             )
         else:
             msg_final = "⚠️ *Alerta Diputados*\n\nEl scraping no trajo datos."
