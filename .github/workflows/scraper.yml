@@ -2,7 +2,7 @@ name: Scraper Diputados Diario
 
 on:
   schedule:
-    - cron: '19 10 * * 1-5'
+    - cron: '39 10 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.12'
 
       - name: Instalar Google Chrome
         run: |
@@ -32,5 +32,6 @@ jobs:
           GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
           WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}    
           WHATSAPP_API_KEY: ${{ secrets.WHATSAPP_API_KEY }}  
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  
+
         run: python main.py
