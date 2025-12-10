@@ -114,11 +114,11 @@ if __name__ == "__main__":
             texto_analisis = analista.analizar_proyectos(filas_nuevas)
 
             msg_final = (
-                f"🤖 *Reporte Diputados*\n\n"
+                f"*Reporte Diputados Diario*\n\n"
                 f"✅ *Nuevos:* {len(filas_nuevas)}\n"
                 f"🔄 *Actualizados:* {contador_actualizados}\n"
-                f"⏭️ *Omitidos:* {contador_omitidos}\n"
-                f"{texto_analisis}"
+                f"⏭️ *Omitidos:* {contador_omitidos}\n\n"
+                f"🤖 *Análisis de Gemini:* {texto_analisis}"
             )
         else:
             msg_final = "⚠️ *Alerta Diputados*\n\nEl scraping no trajo datos."
