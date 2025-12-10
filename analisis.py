@@ -16,13 +16,8 @@ class AnalistaLegislativo:
                 for m in genai.list_models():
                     if 'generateContent' in m.supported_generation_methods:
                         modelos_disponibles.append(m.name)
-                
-                modelo_a_usar = ""
-                if 'models/gemini-1.5-flash' in modelos_disponibles:
-                    modelo_a_usar = 'models/gemini-1.5-flash'
-                elif 'models/gemini-pro' in modelos_disponibles:
-                    modelo_a_usar = 'models/gemini-pro'
-                elif modelos_disponibles:
+                        
+                if modelos_disponibles:
                     modelo_a_usar = modelos_disponibles[0]
                 else:
                     print("⚠️ ALERTA: La API no devolvió ningún modelo disponible.")
