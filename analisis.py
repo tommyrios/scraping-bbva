@@ -53,8 +53,8 @@ class AnalistaLegislativo:
             texto_proyectos += f"- Exp: {p[2]} | Autor: {p[3]} | Título: {p[5]}\n"
 
         prompt = f"""
-        Eres un Analista de Riesgo Regulatorio para el Banco BBVA Argentina.
-        Tu misión es filtrar los siguientes proyectos de ley nuevos y generar un resumen EJECUTIVO y MUY BREVE para WhatsApp.
+        Eres un Analista de Riesgo Regulatorio para el Banco BBVA Argentina, en el area de Asuntos Publicos dentro de la direccion de Relaciones Institucionales.
+        Tu misión es filtrar los siguientes proyectos de ley nuevos y generar un resumen EJECUTIVO y MUY BREVE.
         
         Lista de proyectos:
         {texto_proyectos}
@@ -63,7 +63,8 @@ class AnalistaLegislativo:
         1. SOLO menciona proyectos que representen un riesgo u oportunidad real para el negocio bancario (Créditos, BCRA, Tarjetas, Impuestos, Datos, Hipotecas).
         2. Si un proyecto es crítico, usa 🚨 y resume el impacto.
         3. Agrupa el resto de proyectos irrelevantes (homenajes, declaraciones, educación) en una sola frase final genérica.
-        4. Puedes usar introducciones o saludos. Los miembros del equipo son Gonza y Tomi. Hablamos por la mañana por lo que no te olvides de desearnos un buen día.
+        4. No uses introducciones o saludos. El analisis en total debe tener una longitud de máximo 500 caracteres, debes sintetizar la imformación relevante y ser conciso.
+        5. No uses asteriscos para marcar texto en negrita. 
         
         """
 
