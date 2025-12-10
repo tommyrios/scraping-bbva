@@ -24,16 +24,19 @@ class MensajeSender:
             print("Error: No hay destinatarios configurados.")
             return
 
-        texto_codificado = urllib.parse.quote(mensaje)
-
         print(f"Iniciando difusión a {len(self.destinatarios)} destinatarios...")
 
         for telefono in self.destinatarios:
             try:
-                url = f"https://api.callmebot.com/whatsapp.php?phone={telefono}&text={texto_codificado}&apikey={self.api_key}"
-                req = urllib.request.Request(url)
+                url = f"https://api.callmebot.com/whatsapp.php?phone={telefono}&apikey={self.api_key}"
+                
+                data = urllib.parse.urlencode({'text': mensaje}).encode('utf-8')
+                
+                req = urllib.request.Request(url, data=data, method='POST')
+                
                 with urllib.request.urlopen(req) as response:
                     print(f"Enviado a {telefono}: {response.read().decode('utf-8')}")
+                
                 time.sleep(2)
             except Exception as e:
                 print(f"Error enviando a {telefono}: {e}")
