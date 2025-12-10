@@ -61,7 +61,7 @@ class AnalistaLegislativo:
 
         Instrucciones:
         1. SOLO menciona proyectos que representen un riesgo u oportunidad real para el negocio bancario (Créditos, BCRA, Tarjetas, Impuestos, Datos, Hipotecas).
-        2. Si un proyecto es crítico, usa 🚨 y resume el impacto.
+        2. Si un proyecto es crítico para el banco, usa 🚨 y resume el impacto. Muestra los proyectos en una lista, y utiliza saltos de línea para diferenciar bien la información. 
         3. Agrupa el resto de proyectos irrelevantes (homenajes, declaraciones, educación) en una sola frase final genérica.
         4. No uses introducciones o saludos. El analisis en total debe tener una longitud de máximo 500 caracteres, debes sintetizar la imformación relevante y ser conciso.
         5. No uses asteriscos para marcar texto en negrita. 
