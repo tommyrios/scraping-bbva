@@ -33,4 +33,5 @@ jobs:
           WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}    
           WHATSAPP_API_KEY: ${{ secrets.WHATSAPP_API_KEY }}  
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  
+
         run: python main.py
