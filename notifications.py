@@ -26,17 +26,29 @@ class MensajeSender:
 
         print(f"Iniciando difusión a {len(self.destinatarios)} destinatarios...")
 
+        url = "https://api.callmebot.com/whatsapp.php"
+
         for telefono in self.destinatarios:
             try:
-                url = f"https://api.callmebot.com/whatsapp.php?phone={telefono}&apikey={self.api_key}"
+                params = {
+                    'phone': telefono,
+                    'text': mensaje,
+                    'apikey': self.api_key
+                }
                 
-                data = urllib.parse.urlencode({'text': mensaje}).encode('utf-8')
+                data = urllib.parse.urlencode(params).encode('utf-8')
                 
                 req = urllib.request.Request(url, data=data, method='POST')
                 
+                req.add_header('User-Agent', 'Python-Urllib/3.9')
+                
                 with urllib.request.urlopen(req) as response:
-                    print(f"Enviado a {telefono}: {response.read().decode('utf-8')}")
+                    resultado = response.read().decode('utf-8')
+                    if "ERROR" in resultado:
+                         print(f"⚠️ Error reportado por API en envío a {telefono}: {resultado}")
+                    else:
+                         print(f"✅ Enviado a {telefono}: {resultado}")
                 
                 time.sleep(2)
             except Exception as e:
-                print(f"Error enviando a {telefono}: {e}")
+                print(f"❌ Error de conexión enviando a {telefono}: {e}")
