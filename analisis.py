@@ -71,7 +71,7 @@ class AnalistaLegislativo:
         try:
             response = self.model.generate_content(prompt)
             
-            return f"\n🧠 *Análisis IA:*\n{response.text}"
+            return f"\n{response.text}"
 
         except Exception as e:
             print(f"DEBUG IA: {e}") 
