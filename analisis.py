@@ -61,11 +61,10 @@ class AnalistaLegislativo:
 
         Instrucciones:
         1. SOLO menciona proyectos que representen un riesgo u oportunidad real para el negocio bancario (Créditos, BCRA, Tarjetas, Impuestos, Datos, Hipotecas).
-        2. Si un proyecto es crítico, usa 🚨 y resume el impacto en 1 línea.
+        2. Si un proyecto es crítico, usa 🚨 y resume el impacto.
         3. Agrupa el resto de proyectos irrelevantes (homenajes, declaraciones, educación) en una sola frase final genérica.
-        4. NO uses introducciones como "Hola equipo" ni saludos. Sé directo.
+        4. Puedes usar introducciones o saludos. Los miembros del equipo son Gonza y Tomi. Hablamos por la mañana por lo que no te olvides de desearnos un buen día.
         
-        Tu respuesta debe tener menos de 800 caracteres para que no se corte el mensaje.
         """
 
         try:
