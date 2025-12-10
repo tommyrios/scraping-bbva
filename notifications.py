@@ -1,7 +1,6 @@
 import os
 import time
-import urllib.request
-import urllib.parse
+import requests 
 
 class MensajeSender:
     def __init__(self):
@@ -25,33 +24,25 @@ class MensajeSender:
             return
 
         print(f"Iniciando difusión a {len(self.destinatarios)} destinatarios...")
-
+        
         url = "https://api.callmebot.com/whatsapp.php"
 
         for telefono in self.destinatarios:
             try:
-                params = {
+                payload = {
                     'phone': telefono,
                     'apikey': self.api_key,
                     'text': mensaje
                 }
                 
-                data = urllib.parse.urlencode(params).encode('utf-8')
+                response = requests.post(url, data=payload, timeout=10)
                 
-                req = urllib.request.Request(url, data=data, method='POST')
-                
-
-                req.add_header('Content-Type', 'application/x-www-form-urlencoded')
-                req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
-                
-                with urllib.request.urlopen(req) as response:
-                    resultado = response.read().decode('utf-8')
-                    
-                    if "ERROR" in resultado:
-                         print(f"⚠️ El servidor respondió con error a {telefono}: {resultado}")
-                    else:
-                         print(f"✅ Enviado a {telefono}: {resultado}")
+                if response.status_code == 200 and "ERROR" not in response.text:
+                    print(f"✅ Enviado a {telefono}: {response.text}")
+                else:
+                    print(f"⚠️ Servidor respondió con error a {telefono}: {response.text}")
                 
                 time.sleep(2)
+                
             except Exception as e:
                 print(f"❌ Error crítico enviando a {telefono}: {e}")
