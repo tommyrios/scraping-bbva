@@ -6,7 +6,7 @@ class AnalistaLegislativo:
         self.api_key = os.environ.get('GEMINI_API_KEY')
         if self.api_key:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
         else:
             self.model = None
 
@@ -22,7 +22,6 @@ class AnalistaLegislativo:
             return "No hay proyectos nuevos para analizar."
 
         texto_proyectos = ""
-
         for p in lista_proyectos:
             texto_proyectos += f"- Exp: {p[2]} | Autor: {p[3]} | Título: {p[5]}\n"
 
@@ -33,15 +32,15 @@ class AnalistaLegislativo:
         {texto_proyectos}
 
         Instrucciones:
-        1. Identifica temas recurrentes (ej: "Seguridad", "Impuestos", "Homenajes").
-        2. Busca palabras clave de riesgo bancario: Tasas, BCRA, Tarjetas, Créditos, Fintech, Deudores, Impuestos, Comisiones.
-        3. Si un proyecto impacta al banco, márcalo con 🚨 y explica brevemente por qué.
-        4. Si son solo declaraciones de interés o temas irrelevantes, pon: "🟢 Sin impacto regulatorio relevante."
+        1. Identifica temas recurrentes.
+        2. Busca palabras clave de riesgo bancario: Tasas, BCRA, Tarjetas, Créditos, Fintech, Deudores.
+        3. Si un proyecto impacta al banco, márcalo con 🚨.
+        4. Si son irrelevantes, pon: "🟢 Sin impacto regulatorio relevante."
 
         Formato de respuesta (para WhatsApp):
         - Usa emojis.
-        - Sé extremadamente conciso (máximo 200 palabras en total).
-        - No saludes, ve directo al grano.
+        - Máximo 100 palabras.
+        - Directo al grano.
         """
 
         try:
@@ -49,4 +48,5 @@ class AnalistaLegislativo:
             return f"\n🧠 *Análisis Gemini:*\n{response.text}"
 
         except Exception as e:
+            print(f"DEBUG IA: {e}") 
             return f"\n⚠️ Error en análisis IA: {str(e)}"
