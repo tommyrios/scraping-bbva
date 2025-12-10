@@ -118,15 +118,15 @@ if __name__ == "__main__":
                 f"✅ *Nuevos:* {len(filas_nuevas)}\n"
                 f"🔄 *Actualizados:* {contador_actualizados}\n"
                 f"⏭️ *Omitidos:* {contador_omitidos}\n\n"
-                f"🤖 *Análisis de Gemini:* {texto_analisis}"
+                f"📝 *Análisis de Gemini*\n {texto_analisis}"
             )
         else:
-            msg_final = "⚠️ *Alerta Diputados*\n\nEl scraping no trajo datos."
+            msg_final = "⚠️ *Alerta *\n\nEl scraping no trajo datos."
 
         sender.enviar_difusion(msg_final)
 
     except Exception as e:
-        err_msg = f"❌ *Error Crítico Diputados*\n\n{str(e)}"
+        err_msg = f"❌ *Error Crítico *\n\n{str(e)}"
         print(err_msg)
         sender.enviar_difusion(err_msg)
         exit(1)
