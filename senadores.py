@@ -17,12 +17,9 @@ class ScrapearSenado:
         print("Inicializando robot Senado...")
         options = Options()
         
-        # --- CONFIGURACIÓN HEADLESS ---
         options.add_argument('--headless') 
         options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        # ------------------------------
-        
+        options.add_argument('--disable-dev-shm-usage')        
         options.add_argument('--window-size=1920,1080')
         options.add_argument('--ignore-certificate-errors')
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
@@ -44,7 +41,6 @@ class ScrapearSenado:
             
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
 
-            # 1. PROYECTO (TÍTULO)
             proyecto_texto = "S/D"
             try:
                 tabla_encabezado = soup.find('table', class_='table-bordered')
@@ -53,21 +49,27 @@ class ScrapearSenado:
                     for f in filas:
                         cols = f.find_all('td')
                         if len(cols) >= 4:
-                            proyecto_texto = self.limpiar_texto(cols[3].text)
+                            texto_crudo = self.limpiar_texto(cols[3].text)
+                            
+                            if ":" in texto_crudo:
+                                partes = texto_crudo.split(":", 1)
+                                if len(partes) > 1:
+                                    proyecto_texto = partes[1].strip()
+                                else:
+                                    proyecto_texto = texto_crudo
+                            else:
+                                proyecto_texto = texto_crudo
             except: pass
 
-            # 2. AUTOR (SOLO EL PRIMERO / FIRMANTE)
             autor_principal = "S/D"
             try:
                 div_autores = soup.find('div', id='Autores')
                 if div_autores:
-                    # .find() devuelve solo el primer elemento que encuentra (el firmante principal)
                     link_autor = div_autores.find('a', href=True)
                     if link_autor:
                         autor_principal = self.limpiar_texto(link_autor.text)
             except: pass
 
-            # 3. FECHA DE INGRESO
             fecha = "S/D"
             try:
                 div_tramite = soup.find('div', id='tramiteLegislativo')
@@ -77,7 +79,6 @@ class ScrapearSenado:
                         fecha = self.limpiar_texto(tabla_fechas.find('tbody').find('tr').find_all('td')[0].text)
             except: pass
 
-            # 4. COMISIONES (GIROS)
             lista_comisiones = []
             try:
                 div_tramite = soup.find('div', id='tramiteLegislativo')
@@ -106,7 +107,6 @@ class ScrapearSenado:
             return None
 
     def scrape(self):
-        # Volvemos a la URL raíz para navegar paso a paso
         url_inicio = "https://www.senado.gob.ar/parlamentario/parlamentaria/"
         print(f"Entrando a {url_inicio}")
         
@@ -114,7 +114,6 @@ class ScrapearSenado:
             self.driver.get(url_inicio)
             wait = WebDriverWait(self.driver, 30)
 
-            # --- PASO 1: REALIZAR BÚSQUEDA INICIAL ---
             print("1. Desplegando búsqueda avanzada...")
             boton_avanzada = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '#collapse113')]")))
             self.driver.execute_script("arguments[0].click();", boton_avanzada)
@@ -127,20 +126,17 @@ class ScrapearSenado:
             print("3. Esperando resultados iniciales...")
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
-            # --- PASO 2: CAMBIAR A 100 RESULTADOS ---
             print("4. Aplicando filtro de 100 resultados...")
             try:
                 select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
                 select = Select(select_element)
                 select.select_by_value("100")
-                
                 print("   Esperando recarga de tabla...")
                 time.sleep(5) 
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
             except Exception as e:
                 print(f"⚠️ No se pudo cambiar a 100 (se usará default): {e}")
 
-            # --- PASO 3: PARSEO DE LA TABLA ---
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
             
@@ -149,24 +145,15 @@ class ScrapearSenado:
 
             for fila in filas:
                 cols = fila.find_all('td')
-                
-                # Validación de seguridad: necesitamos al menos 2 columnas
-                if len(cols) < 2:
-                    continue
+                if len(cols) < 2: continue
 
                 enlace = cols[0].find('a', href=True)
-                if not enlace:
-                    continue
-                
-                if 'verExp' not in enlace['href']:
-                    continue
+                if not enlace or 'verExp' not in enlace['href']: continue
 
-                # Si pasamos las validaciones, procesamos:
                 url_completa = f"https://www.senado.gob.ar{enlace['href']}"
                 
-                # --- LÓGICA DE ID: 2042-PD-25 ---
-                texto_numero = self.limpiar_texto(enlace.text) # "2042/25"
-                texto_tipo = self.limpiar_texto(cols[1].text)  # "PD"
+                texto_numero = self.limpiar_texto(enlace.text)
+                texto_tipo = self.limpiar_texto(cols[1].text)
                 
                 id_formateado = texto_numero 
                 try:
@@ -182,9 +169,7 @@ class ScrapearSenado:
                     'id': id_formateado
                 })
 
-            # Eliminar duplicados
             items_unicos = {item['url']: item for item in items_a_procesar}.values()
-            
             print(f"✅ Se encontraron {len(items_unicos)} proyectos únicos.")
 
         except Exception:
@@ -193,10 +178,8 @@ class ScrapearSenado:
             self.driver.quit()
             return pd.DataFrame()
 
-        # --- PASO 4: EXTRACCIÓN DETALLADA ---
         for i, item in enumerate(items_unicos): 
             print(f"[{i+1}/{len(items_unicos)}] {item['id']}...")
-            
             info_detalle = self.extraer_detalle_proyecto(item['url'])
             
             if info_detalle:
