@@ -136,7 +136,7 @@ class ScrapearSenado:
 
             print("3. Esperando resultados...")
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-
+"""
             print("4. Filtro 100 resultados...")
             try:
                 select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
@@ -145,7 +145,7 @@ class ScrapearSenado:
                 time.sleep(5) 
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
             except: pass
-
+"""
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
             items_a_procesar = []
@@ -180,7 +180,6 @@ class ScrapearSenado:
             self.driver.quit()
             return pd.DataFrame()
 
-        # --- EXTRACCIÓN DETALLE ---
         for i, item in enumerate(items_unicos): 
             print(f"[{i+1}/{len(items_unicos)}] {item['id']}...")
             info = self.extraer_detalle_proyecto(item['url'])
