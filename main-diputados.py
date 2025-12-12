@@ -13,7 +13,7 @@ if __name__ == "__main__":
     
     try:
         url_objetivo = "https://www.diputados.gov.ar/proyectos/"
-        bot = ScrapearDiputados()
+        bot = Scrapear()
         df_resultado = bot.scrape(url_objetivo)
 
         if df_resultado is not None and not df_resultado.empty:
@@ -78,7 +78,7 @@ if __name__ == "__main__":
                 if match.empty:
                     formatted_id = f"PL{proximo_id:03d}"
                     fila_ordenada = [
-                        formatted_id, 'Diputados', row['Expediente'], row['Autor'],
+                        formatted_id, row['Cámara de Origen'], row['Expediente'], row['Autor'],
                         row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
                         '', '', row['Partido Político'], row['Provincia'], ''
                     ]
@@ -93,7 +93,7 @@ if __name__ == "__main__":
                     if fecha_nueva != fecha_existente:
                         fila_sheet_num = idx_existente + 2
                         fila_actualizada = [
-                            id_existente, 'Diputados', row['Expediente'], row['Autor'],
+                            id_existente, row['Cámara de Origen'], row['Expediente'], row['Autor'],
                             row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
                             match.iloc[0]['Estado'], match.iloc[0]['Probabilidad'],
                             row['Partido Político'], row['Provincia'], match.iloc[0]['Observaciones']
