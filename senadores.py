@@ -136,16 +136,16 @@ class ScrapearSenado:
 
             print("3. Esperando resultados...")
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-"""
-            print("4. Filtro 100 resultados...")
-            try:
-                select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
-                select = Select(select_element)
-                select.select_by_value("100")
-                time.sleep(5) 
-                wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            except: pass
-"""
+# --- FILTRO DESACTIVADO PARA TESTING (Con # para evitar errores) ---
+            # print("4. Filtro 100 resultados...")
+            # try:
+            #     select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
+            #     select = Select(select_element)
+            #     select.select_by_value("100")
+            #     time.sleep(5) 
+            #     wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+            # except: pass
+            # -------------------------------------------------------------------
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
             items_a_procesar = []
