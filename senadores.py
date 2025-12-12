@@ -66,8 +66,19 @@ class ScrapearSenado:
                 div_autores = soup.find('div', id='Autores')
                 if div_autores:
                     link_autor = div_autores.find('a', href=True)
+                    
                     if link_autor:
-                        autor_principal = self.limpiar_texto(link_autor.text)
+                        if link_autor.has_attr('title') and link_autor['title']:
+                            autor_principal = link_autor['title'].strip().upper()
+                        else:
+                            raw_text = self.limpiar_texto(link_autor.text)
+                            autor_principal = raw_text.replace(" ,", ",").upper()
+                    else:
+                        td = div_autores.find('td')
+                        if td:
+                            raw_text = self.limpiar_texto(td.text)
+                            autor_principal = raw_text.replace(" ,", ",").upper()
+
             except: pass
 
             fecha = "S/D"
@@ -119,29 +130,25 @@ class ScrapearSenado:
             self.driver.execute_script("arguments[0].click();", boton_avanzada)
             time.sleep(1)
 
-            print("2. Enviando formulario vacío (Traer todo)...")
+            print("2. Enviando formulario vacío...")
             formulario = wait.until(EC.presence_of_element_located((By.NAME, "ingreso2")))
             formulario.submit()
 
-            print("3. Esperando resultados iniciales...")
+            print("3. Esperando resultados...")
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
-            print("4. Aplicando filtro de 100 resultados...")
+            print("4. Filtro 100 resultados...")
             try:
                 select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
                 select = Select(select_element)
                 select.select_by_value("100")
-                print("   Esperando recarga de tabla...")
                 time.sleep(5) 
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            except Exception as e:
-                print(f"⚠️ No se pudo cambiar a 100 (se usará default): {e}")
+            except: pass
 
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
-            
             items_a_procesar = []
-            print(f"Analizando {len(filas)} filas en tabla de resultados...")
 
             for fila in filas:
                 cols = fila.find_all('td')
@@ -159,37 +166,33 @@ class ScrapearSenado:
                 try:
                     if "/" in texto_numero:
                         partes = texto_numero.split('/')
-                        num = partes[0]
-                        anio = partes[1]
-                        id_formateado = f"{num}-{texto_tipo}-{anio}"
+                        id_formateado = f"{partes[0]}-{texto_tipo}-{partes[1]}"
                 except: pass
                 
-                items_a_procesar.append({
-                    'url': url_completa,
-                    'id': id_formateado
-                })
+                items_a_procesar.append({'url': url_completa, 'id': id_formateado})
 
             items_unicos = {item['url']: item for item in items_a_procesar}.values()
-            print(f"✅ Se encontraron {len(items_unicos)} proyectos únicos.")
+            print(f"✅ Proyectos únicos encontrados: {len(items_unicos)}")
 
         except Exception:
-            print("❌ Error CRÍTICO en la navegación.")
+            print("❌ Error en navegación.")
             print(traceback.format_exc())
             self.driver.quit()
             return pd.DataFrame()
 
+        # --- EXTRACCIÓN DETALLE ---
         for i, item in enumerate(items_unicos): 
             print(f"[{i+1}/{len(items_unicos)}] {item['id']}...")
-            info_detalle = self.extraer_detalle_proyecto(item['url'])
+            info = self.extraer_detalle_proyecto(item['url'])
             
-            if info_detalle:
+            if info:
                 self.data.append({
                     'Cámara de Origen': 'Senado',
                     'Expediente': item['id'],
-                    'Autor': info_detalle['Autor'],
-                    'Fecha de inicio': info_detalle['Fecha de inicio'],
-                    'Proyecto': info_detalle['Proyecto'],
-                    'Comisiones': info_detalle['Comisiones'],
+                    'Autor': info['Autor'],
+                    'Fecha de inicio': info['Fecha de inicio'],
+                    'Proyecto': info['Proyecto'],
+                    'Comisiones': info['Comisiones'],
                     'Estado': '',
                     'Probabilidad': '',
                     'Partido Político': '',
