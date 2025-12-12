@@ -16,23 +16,54 @@ class ScrapearSenado:
     def __init__(self):
         print("Inicializando robot Senado...")
         options = Options()
-        
         options.add_argument('--headless') 
         options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')        
+        options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--window-size=1920,1080')
         options.add_argument('--ignore-certificate-errors')
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
 
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
         self.data = []
+        self.mapa_partidos = {}
 
     def limpiar_texto(self, texto):
         if not texto: return "S/D"
         return " ".join(texto.split())
 
+    def obtener_diccionario_partidos(self):
+        url_lista = "https://www.senado.gob.ar/senadores/listados/listaSenadoRes"
+        print(f"Obteniendo partidos desde {url_lista}")
+        
+        try:
+            self.driver.get(url_lista)
+            WebDriverWait(self.driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+            
+            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            tabla = soup.find('table', id='senadoresTabla')
+            
+            if not tabla:
+                return
+
+            filas = tabla.find('tbody').find_all('tr')
+            
+            for fila in filas:
+                cols = fila.find_all('td')
+                if len(cols) >= 4:
+                    nombre = "S/D"
+                    link_nombre = cols[1].find('a', href=True)
+                    if link_nombre and link_nombre.has_attr('title'):
+                        nombre = link_nombre['title'].strip().upper()
+                    
+                    partido = self.limpiar_texto(cols[3].text).upper()
+                    
+                    if nombre != "S/D":
+                        self.mapa_partidos[nombre] = partido
+
+        except Exception as e:
+            print(f"Error obteniendo partidos: {e}")
+
     def extraer_detalle_proyecto(self, url):
-        """Entra a la ficha para sacar: Primer Autor, Fecha, Comisiones y Título completo"""
         try:
             self.driver.get(url)
             WebDriverWait(self.driver, 15).until(
@@ -78,7 +109,6 @@ class ScrapearSenado:
                         if td:
                             raw_text = self.limpiar_texto(td.text)
                             autor_principal = raw_text.replace(" ,", ",").upper()
-
             except: pass
 
             fecha = "S/D"
@@ -87,7 +117,8 @@ class ScrapearSenado:
                 if div_tramite:
                     tabla_fechas = div_tramite.find('table', attrs={'summary': 'Fechas en Mesa de Entradas'})
                     if tabla_fechas:
-                        fecha = self.limpiar_texto(tabla_fechas.find('tbody').find('tr').find_all('td')[0].text)
+                        texto_fecha = tabla_fechas.find('tbody').find('tr').find_all('td')[0].text
+                        fecha = self.limpiar_texto(texto_fecha).replace('-', '/')
             except: pass
 
             lista_comisiones = []
@@ -118,6 +149,8 @@ class ScrapearSenado:
             return None
 
     def scrape(self):
+        self.obtener_diccionario_partidos()
+
         url_inicio = "https://www.senado.gob.ar/parlamentario/parlamentaria/"
         print(f"Entrando a {url_inicio}")
         
@@ -125,27 +158,27 @@ class ScrapearSenado:
             self.driver.get(url_inicio)
             wait = WebDriverWait(self.driver, 30)
 
-            print("1. Desplegando búsqueda avanzada...")
+            print("1. Desplegando búsqueda...")
             boton_avanzada = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '#collapse113')]")))
             self.driver.execute_script("arguments[0].click();", boton_avanzada)
             time.sleep(1)
 
-            print("2. Enviando formulario vacío...")
+            print("2. Enviando formulario...")
             formulario = wait.until(EC.presence_of_element_located((By.NAME, "ingreso2")))
             formulario.submit()
 
             print("3. Esperando resultados...")
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-# --- FILTRO DESACTIVADO PARA TESTING (Con # para evitar errores) ---
-            # print("4. Filtro 100 resultados...")
-            # try:
-            #     select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
-            #     select = Select(select_element)
-            #     select.select_by_value("100")
-            #     time.sleep(5) 
-            #     wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            # except: pass
-            # -------------------------------------------------------------------
+
+            print("4. Filtrando 100 resultados...")
+            try:
+                select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
+                select = Select(select_element)
+                select.select_by_value("100")
+                time.sleep(5) 
+                wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+            except: pass
+
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
             items_a_procesar = []
@@ -172,10 +205,10 @@ class ScrapearSenado:
                 items_a_procesar.append({'url': url_completa, 'id': id_formateado})
 
             items_unicos = {item['url']: item for item in items_a_procesar}.values()
-            print(f"✅ Proyectos únicos encontrados: {len(items_unicos)}")
+            print(f"Se encontraron {len(items_unicos)} proyectos únicos.")
 
         except Exception:
-            print("❌ Error en navegación.")
+            print("Error critico en navegacion.")
             print(traceback.format_exc())
             self.driver.quit()
             return pd.DataFrame()
@@ -185,6 +218,8 @@ class ScrapearSenado:
             info = self.extraer_detalle_proyecto(item['url'])
             
             if info:
+                partido_politico = self.mapa_partidos.get(info['Autor'], "")
+
                 self.data.append({
                     'Cámara de Origen': 'Senado',
                     'Expediente': item['id'],
@@ -194,7 +229,7 @@ class ScrapearSenado:
                     'Comisiones': info['Comisiones'],
                     'Estado': '',
                     'Probabilidad': '',
-                    'Partido Político': '',
+                    'Partido Político': partido_politico,
                     'Provincia': '',
                     'Observaciones': ''
                 })
