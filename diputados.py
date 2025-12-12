@@ -24,6 +24,17 @@ class ScrapearDiputados:
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
         self.data = []
 
+    def get_origen(self, soup):
+        """Busca el span que contiene 'Iniciado en' y extrae el valor."""
+        try:
+            spans = soup.find_all('span')
+            for s in spans:
+                if "Iniciado en" in s.text:
+                    return s.text.split(":")[-1].strip()
+            return "Diputados" 
+        except: 
+            return "Diputados"
+
     def get_expediente(self, soup):
         try:
             spans = soup.find_all('span')
@@ -125,7 +136,7 @@ class ScrapearDiputados:
             autor, partido, provincia = self.get_autor_info(bloque)
 
             self.data.append({
-                'Cámara de Origen': 'Diputados',
+                'Cámara de Origen': self.get_origen(bloque), 
                 'Expediente': self.get_expediente(bloque),
                 'Autor': autor,
                 'Fecha de inicio': self.get_fechaInicio(bloque),
