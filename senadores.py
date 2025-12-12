@@ -8,7 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select # Importante para el dropdown
+from selenium.webdriver.support.ui import Select
 from bs4 import BeautifulSoup
 
 class ScrapearSenado:
@@ -32,21 +32,19 @@ class ScrapearSenado:
 
     def limpiar_texto(self, texto):
         if not texto: return "S/D"
-        # Elimina espacios dobles y saltos de línea
         return " ".join(texto.split())
 
     def extraer_detalle_proyecto(self, url):
         """Entra a la ficha para sacar: Primer Autor, Fecha, Comisiones y Título completo"""
         try:
             self.driver.get(url)
-            # Esperamos que cargue el título principal
             WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.TAG_NAME, "h1"))
             )
             
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
 
-            # 1. PROYECTO (TÍTULO / EXTRACTO)
+            # 1. PROYECTO (TÍTULO)
             proyecto_texto = "S/D"
             try:
                 tabla_encabezado = soup.find('table', class_='table-bordered')
@@ -63,7 +61,7 @@ class ScrapearSenado:
             try:
                 div_autores = soup.find('div', id='Autores')
                 if div_autores:
-                    # Usamos .find() en lugar de .find_all() para traer solo el primero
+                    # .find() devuelve solo el primer elemento que encuentra
                     link_autor = div_autores.find('a', href=True)
                     if link_autor:
                         autor_principal = self.limpiar_texto(link_autor.text)
@@ -108,104 +106,51 @@ class ScrapearSenado:
             return None
 
     def scrape(self):
-        # URL Directa a búsqueda avanzada
-        url_avanzada = "https://www.senado.gob.ar/parlamentario/parlamentaria/avanzada"
-        print(f"Entrando a {url_avanzada}")
+        # Volvemos a la URL raíz que sabemos que funciona
+        url_inicio = "https://www.senado.gob.ar/parlamentario/parlamentaria/"
+        print(f"Entrando a {url_inicio}")
         
         try:
-            self.driver.get(url_avanzada)
+            self.driver.get(url_inicio)
             wait = WebDriverWait(self.driver, 30)
 
-            # --- LÓGICA DE PAGINACIÓN (100 REGISTROS) ---
-            print("Configurando filtro a 100 resultados...")
+            # --- PASO 1: REALIZAR BÚSQUEDA INICIAL ---
+            print("1. Desplegando búsqueda avanzada...")
+            boton_avanzada = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '#collapse113')]")))
+            self.driver.execute_script("arguments[0].click();", boton_avanzada)
+            time.sleep(1)
+
+            print("2. Enviando formulario vacío (Traer todo)...")
+            formulario = wait.until(EC.presence_of_element_located((By.NAME, "ingreso2")))
+            formulario.submit()
+
+            print("3. Esperando resultados iniciales...")
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+
+            # --- PASO 2: CAMBIAR A 100 RESULTADOS ---
+            # Ahora sí estamos en la pantalla de resultados, así que el dropdown existe
+            print("4. Aplicando filtro de 100 resultados...")
             try:
-                # Buscamos el selector <select name="cantRegistros">
                 select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
                 select = Select(select_element)
                 select.select_by_value("100")
                 
-                # Como tiene onchange="submit()", la página se recarga sola.
-                # Esperamos que la tabla se vuelva "stale" (desaparezca) o que reaparezca.
-                print("Esperando recarga de tabla tras selección...")
-                time.sleep(4) 
+                print("   Esperando recarga de tabla...")
+                # Esperamos a que la tabla vieja desaparezca o pase un tiempo seguro
+                time.sleep(5) 
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-                
             except Exception as e:
-                print(f"⚠️ No se pudo cambiar a 100 registros (se usará el default): {e}")
+                print(f"⚠️ No se pudo cambiar a 100 (se usará default): {e}")
 
-            # --- OBTENCIÓN DE LINKS Y ARMADO DE ID ---
+            # --- PASO 3: PARSEO DE LA TABLA ---
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
             
             items_a_procesar = []
-
-            print(f"Analizando {len(filas)} filas encontradas...")
+            print(f"Analizando {len(filas)} filas en tabla de resultados...")
 
             for fila in filas:
                 cols = fila.find_all('td')
-                # Estructura esperada en listado:
-                # Col 0: <a href="LINK">NUMERO (2042/25)</a>
-                # Col 1: TIPO (PD)
-                
+                # Buscamos filas con al menos 2 columnas (Expediente y Tipo)
                 if len(cols) >= 2:
                     enlace = cols[0].find('a', href=True)
-                    if enlace and 'verExp' in enlace['href']:
-                        url_completa = f"https://www.senado.gob.ar{enlace['href']}"
-                        
-                        # --- LÓGICA DE FORMATEO DE ID (2042-PD-25) ---
-                        texto_numero = self.limpiar_texto(enlace.text) # Ej: "2042/25"
-                        texto_tipo = self.limpiar_texto(cols[1].text)  # Ej: "PD"
-                        
-                        id_formateado = texto_numero # Fallback por si falla el split
-                        try:
-                            if "/" in texto_numero:
-                                partes = texto_numero.split('/')
-                                numero = partes[0]
-                                anio = partes[1]
-                                # Resultado: 2042-PD-25
-                                id_formateado = f"{numero}-{texto_tipo}-{anio}"
-                        except:
-                            pass
-                        
-                        # Guardamos la info preliminar para procesar luego
-                        items_a_procesar.append({
-                            'url': url_completa,
-                            'id': id_formateado
-                        })
-
-            # Eliminamos duplicados por URL
-            # (Usamos un diccionario auxiliar para filtrar)
-            items_unicos = {item['url']: item for item in items_a_procesar}.values()
-            
-            print(f"✅ Se encontraron {len(items_unicos)} proyectos únicos. Iniciando extracción profunda...")
-
-        except Exception:
-            print("❌ Error CRÍTICO obteniendo lista de proyectos.")
-            print(traceback.format_exc())
-            self.driver.quit()
-            return pd.DataFrame()
-
-        # --- RECORRIDO DE PROYECTOS ---
-        for i, item in enumerate(items_unicos): 
-            print(f"[{i+1}/{len(items_unicos)}] Procesando {item['id']}...")
-            
-            info_detalle = self.extraer_detalle_proyecto(item['url'])
-            
-            if info_detalle:
-                self.data.append({
-                    'Cámara de Origen': 'Senado',
-                    'Expediente': item['id'], # Usamos el ID formateado que calculamos arriba
-                    'Autor': info_detalle['Autor'],
-                    'Fecha de inicio': info_detalle['Fecha de inicio'],
-                    'Proyecto': info_detalle['Proyecto'],
-                    'Comisiones': info_detalle['Comisiones'],
-                    'Estado': '',
-                    'Probabilidad': '',
-                    'Partido Político': '',
-                    'Provincia': '',
-                    'Observaciones': ''
-                })
-                time.sleep(1)
-
-        self.driver.quit()
-        return pd.DataFrame(self.data)
