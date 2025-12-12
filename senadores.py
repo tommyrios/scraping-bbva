@@ -1,4 +1,5 @@
 import time
+import traceback # Para ver el error real
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -15,9 +16,11 @@ class ScrapearSenado:
         print("Inicializando robot Senado...")
         options = Options()
         
-        options.add_argument('--headless')  
+        # --- CONFIGURACIÓN HEADLESS ---
+        options.add_argument('--headless') 
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
+        # ------------------------------
         
         options.add_argument('--window-size=1920,1080')
         options.add_argument('--ignore-certificate-errors')
@@ -39,13 +42,14 @@ class ScrapearSenado:
             
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
 
+            # 1. EXPEDIENTE
             expediente = "S/D"
             try:
                 h1 = soup.find('h1')
-                if h1:
-                    expediente = h1.text.replace("Número de Expediente", "").strip()
+                if h1: expediente = h1.text.replace("Número de Expediente", "").strip()
             except: pass
 
+            # 2. EXTRACTO
             proyecto_texto = "S/D"
             try:
                 tabla_encabezado = soup.find('table', class_='table-bordered')
@@ -57,6 +61,7 @@ class ScrapearSenado:
                             proyecto_texto = self.limpiar_texto(cols[3].text)
             except: pass
 
+            # 3. AUTORES
             autores = "S/D"
             try:
                 div_autores = soup.find('div', id='Autores')
@@ -66,11 +71,10 @@ class ScrapearSenado:
                     for a in links_autores:
                         if "senador" in a['href']:
                             nombres.append(self.limpiar_texto(a.text))
-                    
-                    if nombres:
-                        autores = ", ".join(nombres)
+                    if nombres: autores = ", ".join(nombres)
             except: pass
 
+            # 4. FECHA
             fecha = "S/D"
             try:
                 div_tramite = soup.find('div', id='tramiteLegislativo')
@@ -80,12 +84,12 @@ class ScrapearSenado:
                         fecha = self.limpiar_texto(tabla_fechas.find('tbody').find('tr').find_all('td')[0].text)
             except: pass
 
+            # 5. COMISIONES
             lista_comisiones = []
             try:
                 div_tramite = soup.find('div', id='tramiteLegislativo')
                 if div_tramite:
                     tabla_giros = div_tramite.find('table', attrs={'summary': 'Giros del Expediente a Comisiones'})
-                    
                     if tabla_giros:
                         filas_giros = tabla_giros.find('tbody').find_all('tr')
                         for fila in filas_giros:
@@ -107,7 +111,7 @@ class ScrapearSenado:
             }
 
         except Exception as e:
-            print(f"Error en detalle {url}: {e}")
+            # print(f"Error en detalle {url}: {e}") # Comentado para no ensuciar log
             return None
 
     def scrape(self):
@@ -116,21 +120,30 @@ class ScrapearSenado:
         
         try:
             self.driver.get(url_busqueda)
-            wait = WebDriverWait(self.driver, 20)
+            wait = WebDriverWait(self.driver, 30) # Aumentamos tiempo de espera
 
-            print("Desplegando búsqueda avanzada...")
+            print("1. Desplegando búsqueda avanzada...")
             boton_avanzada = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '#collapse113')]")))
             self.driver.execute_script("arguments[0].click();", boton_avanzada)
-            time.sleep(1)
+            time.sleep(2)
 
-            print("Click en Buscar...")
-            boton_buscar = wait.until(EC.element_to_be_clickable((By.ID, "type_image2")))
-            self.driver.execute_script("arguments[0].click();", boton_buscar)
+            print("2. Localizando formulario...")
+            # En lugar de click al botón, buscamos el formulario por su NAME 'ingreso2' y hacemos submit
+            formulario = wait.until(EC.presence_of_element_located((By.NAME, "ingreso2")))
+            
+            print("3. Enviando formulario (Submit)...")
+            formulario.submit()
 
-            print("Esperando lista de resultados...")
+            print("4. Esperando recarga de página...")
+            # Esperamos que aparezca la tabla de resultados
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            time.sleep(2) 
+            
+            # Verificamos URL para debug
+            print(f"URL actual post-búsqueda: {self.driver.current_url}")
+            
+            time.sleep(3) 
 
+            # --- PARSEO DE RESULTADOS ---
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             links_proyectos = []
             
@@ -142,15 +155,20 @@ class ScrapearSenado:
                     links_proyectos.append(url_completa)
             
             links_proyectos = list(set(links_proyectos))
-            print(f"Se encontraron {len(links_proyectos)} proyectos.")
+            print(f"✅ Se encontraron {len(links_proyectos)} proyectos.")
 
-        except Exception as e:
-            print(f"Error búsqueda inicial: {e}")
+        except Exception:
+            print("❌ Error CRÍTICO en la búsqueda inicial.")
+            print(traceback.format_exc()) # Esto nos dirá el error EXACTO
             self.driver.quit()
             return pd.DataFrame()
 
+        # Procesamos los resultados encontrados
+        print(f"Iniciando extracción de detalle para {len(links_proyectos)} proyectos...")
+        
         for i, link in enumerate(links_proyectos): 
-            print(f"[{i+1}/{len(links_proyectos)}] Procesando: {link}")
+            # Imprimimos progreso cada 1 proyecto
+            print(f"[{i+1}/{len(links_proyectos)}] Procesando...")
             
             info = self.extraer_detalle_proyecto(link)
             
