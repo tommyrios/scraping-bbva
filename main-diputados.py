@@ -13,7 +13,7 @@ if __name__ == "__main__":
     
     try:
         url_objetivo = "https://www.diputados.gov.ar/proyectos/"
-        bot = Scrapear()
+        bot = ScrapearDiputados()
         df_resultado = bot.scrape(url_objetivo)
 
         if df_resultado is not None and not df_resultado.empty:
