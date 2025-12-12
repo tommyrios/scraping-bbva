@@ -61,7 +61,7 @@ class ScrapearSenado:
             try:
                 div_autores = soup.find('div', id='Autores')
                 if div_autores:
-                    # .find() devuelve solo el primer elemento que encuentra
+                    # .find() devuelve solo el primer elemento que encuentra (el firmante principal)
                     link_autor = div_autores.find('a', href=True)
                     if link_autor:
                         autor_principal = self.limpiar_texto(link_autor.text)
@@ -106,7 +106,7 @@ class ScrapearSenado:
             return None
 
     def scrape(self):
-        # Volvemos a la URL raíz que sabemos que funciona
+        # Volvemos a la URL raíz para navegar paso a paso
         url_inicio = "https://www.senado.gob.ar/parlamentario/parlamentaria/"
         print(f"Entrando a {url_inicio}")
         
@@ -128,7 +128,6 @@ class ScrapearSenado:
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
             # --- PASO 2: CAMBIAR A 100 RESULTADOS ---
-            # Ahora sí estamos en la pantalla de resultados, así que el dropdown existe
             print("4. Aplicando filtro de 100 resultados...")
             try:
                 select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
@@ -136,7 +135,6 @@ class ScrapearSenado:
                 select.select_by_value("100")
                 
                 print("   Esperando recarga de tabla...")
-                # Esperamos a que la tabla vieja desaparezca o pase un tiempo seguro
                 time.sleep(5) 
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
             except Exception as e:
@@ -151,29 +149,38 @@ class ScrapearSenado:
 
             for fila in filas:
                 cols = fila.find_all('td')
-                # Buscamos filas con al menos 2 columnas (Expediente y Tipo)
-                if len(cols) >= 2:
-                    enlace = cols[0].find('a', href=True)
-                    if enlace and 'verExp' in enlace['href']:
-                        url_completa = f"https://www.senado.gob.ar{enlace['href']}"
-                        
-                        # --- LÓGICA DE ID: 2042-PD-25 ---
-                        texto_numero = self.limpiar_texto(enlace.text) # "2042/25"
-                        texto_tipo = self.limpiar_texto(cols[1].text)  # "PD"
-                        
-                        id_formateado = texto_numero 
-                        try:
-                            if "/" in texto_numero:
-                                partes = texto_numero.split('/')
-                                num = partes[0]
-                                anio = partes[1]
-                                id_formateado = f"{num}-{texto_tipo}-{anio}"
-                        except: pass
-                        
-                        items_a_procesar.append({
-                            'url': url_completa,
-                            'id': id_formateado
-                        })
+                
+                # Validación de seguridad: necesitamos al menos 2 columnas
+                if len(cols) < 2:
+                    continue
+
+                enlace = cols[0].find('a', href=True)
+                if not enlace:
+                    continue
+                
+                if 'verExp' not in enlace['href']:
+                    continue
+
+                # Si pasamos las validaciones, procesamos:
+                url_completa = f"https://www.senado.gob.ar{enlace['href']}"
+                
+                # --- LÓGICA DE ID: 2042-PD-25 ---
+                texto_numero = self.limpiar_texto(enlace.text) # "2042/25"
+                texto_tipo = self.limpiar_texto(cols[1].text)  # "PD"
+                
+                id_formateado = texto_numero 
+                try:
+                    if "/" in texto_numero:
+                        partes = texto_numero.split('/')
+                        num = partes[0]
+                        anio = partes[1]
+                        id_formateado = f"{num}-{texto_tipo}-{anio}"
+                except: pass
+                
+                items_a_procesar.append({
+                    'url': url_completa,
+                    'id': id_formateado
+                })
 
             # Eliminar duplicados
             items_unicos = {item['url']: item for item in items_a_procesar}.values()
@@ -187,7 +194,6 @@ class ScrapearSenado:
             return pd.DataFrame()
 
         # --- PASO 4: EXTRACCIÓN DETALLADA ---
-        # Si quieres probar rápido, deja el slice [:5] un momento más
         for i, item in enumerate(items_unicos): 
             print(f"[{i+1}/{len(items_unicos)}] {item['id']}...")
             
@@ -207,7 +213,6 @@ class ScrapearSenado:
                     'Provincia': '',
                     'Observaciones': ''
                 })
-                # Pausa breve para no saturar
                 time.sleep(0.5)
 
         self.driver.quit()
