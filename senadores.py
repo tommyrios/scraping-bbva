@@ -154,3 +154,61 @@ class ScrapearSenado:
                 # Buscamos filas con al menos 2 columnas (Expediente y Tipo)
                 if len(cols) >= 2:
                     enlace = cols[0].find('a', href=True)
+                    if enlace and 'verExp' in enlace['href']:
+                        url_completa = f"https://www.senado.gob.ar{enlace['href']}"
+                        
+                        # --- LÓGICA DE ID: 2042-PD-25 ---
+                        texto_numero = self.limpiar_texto(enlace.text) # "2042/25"
+                        texto_tipo = self.limpiar_texto(cols[1].text)  # "PD"
+                        
+                        id_formateado = texto_numero 
+                        try:
+                            if "/" in texto_numero:
+                                partes = texto_numero.split('/')
+                                num = partes[0]
+                                anio = partes[1]
+                                id_formateado = f"{num}-{texto_tipo}-{anio}"
+                        except: pass
+                        
+                        items_a_procesar.append({
+                            'url': url_completa,
+                            'id': id_formateado
+                        })
+
+            # Eliminar duplicados
+            items_unicos = {item['url']: item for item in items_a_procesar}.values()
+            
+            print(f"✅ Se encontraron {len(items_unicos)} proyectos únicos.")
+
+        except Exception:
+            print("❌ Error CRÍTICO en la navegación.")
+            print(traceback.format_exc())
+            self.driver.quit()
+            return pd.DataFrame()
+
+        # --- PASO 4: EXTRACCIÓN DETALLADA ---
+        # Si quieres probar rápido, deja el slice [:5] un momento más
+        for i, item in enumerate(items_unicos): 
+            print(f"[{i+1}/{len(items_unicos)}] {item['id']}...")
+            
+            info_detalle = self.extraer_detalle_proyecto(item['url'])
+            
+            if info_detalle:
+                self.data.append({
+                    'Cámara de Origen': 'Senado',
+                    'Expediente': item['id'],
+                    'Autor': info_detalle['Autor'],
+                    'Fecha de inicio': info_detalle['Fecha de inicio'],
+                    'Proyecto': info_detalle['Proyecto'],
+                    'Comisiones': info_detalle['Comisiones'],
+                    'Estado': '',
+                    'Probabilidad': '',
+                    'Partido Político': '',
+                    'Provincia': '',
+                    'Observaciones': ''
+                })
+                # Pausa breve para no saturar
+                time.sleep(0.5)
+
+        self.driver.quit()
+        return pd.DataFrame(self.data)
