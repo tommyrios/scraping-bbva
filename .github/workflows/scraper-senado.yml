@@ -1,4 +1,4 @@
-name: Scraper Senado (Dev)
+name: Scraper Senado 
 
 on:
   schedule:
