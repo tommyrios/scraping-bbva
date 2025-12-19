@@ -25,7 +25,7 @@ class ScrapearSenado:
 
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
         self.data = []
-        self.mapa_partidos = {}
+        self.mapa_datos_senadores = {} 
 
     def limpiar_texto(self, texto):
         if not texto: return "S/D"
@@ -33,7 +33,7 @@ class ScrapearSenado:
 
     def obtener_diccionario_partidos(self):
         url_lista = "https://www.senado.gob.ar/senadores/listados/listaSenadoRes"
-        print(f"Obteniendo partidos desde {url_lista}")
+        print(f"Obteniendo datos de senadores desde {url_lista}")
         
         try:
             self.driver.get(url_lista)
@@ -55,13 +55,17 @@ class ScrapearSenado:
                     if link_nombre and link_nombre.has_attr('title'):
                         nombre = link_nombre['title'].strip().upper()
                     
+                    provincia = self.limpiar_texto(cols[2].text)
                     partido = self.limpiar_texto(cols[3].text).upper()
                     
                     if nombre != "S/D":
-                        self.mapa_partidos[nombre] = partido
+                        self.mapa_datos_senadores[nombre] = {
+                            'partido': partido,
+                            'provincia': provincia
+                        }
 
         except Exception as e:
-            print(f"Error obteniendo partidos: {e}")
+            print(f"Error obteniendo lista de senadores: {e}")
 
     def extraer_detalle_proyecto(self, url):
         try:
@@ -81,7 +85,6 @@ class ScrapearSenado:
                         cols = f.find_all('td')
                         if len(cols) >= 4:
                             texto_crudo = self.limpiar_texto(cols[3].text)
-                            
                             if ":" in texto_crudo:
                                 partes = texto_crudo.split(":", 1)
                                 if len(partes) > 1:
@@ -97,7 +100,6 @@ class ScrapearSenado:
                 div_autores = soup.find('div', id='Autores')
                 if div_autores:
                     link_autor = div_autores.find('a', href=True)
-                    
                     if link_autor:
                         if link_autor.has_attr('title') and link_autor['title']:
                             autor_principal = link_autor['title'].strip().upper()
@@ -218,7 +220,7 @@ class ScrapearSenado:
             info = self.extraer_detalle_proyecto(item['url'])
             
             if info:
-                partido_politico = self.mapa_partidos.get(info['Autor'], "")
+                datos_extra = self.mapa_datos_senadores.get(info['Autor'], {'partido': '', 'provincia': ''})
 
                 self.data.append({
                     'Cámara de Origen': 'Senado',
@@ -229,8 +231,8 @@ class ScrapearSenado:
                     'Comisiones': info['Comisiones'],
                     'Estado': '',
                     'Probabilidad': '',
-                    'Partido Político': partido_politico,
-                    'Provincia': '',
+                    'Partido Político': datos_extra['partido'],
+                    'Provincia': datos_extra['provincia'],
                     'Observaciones': ''
                 })
                 time.sleep(0.5)
