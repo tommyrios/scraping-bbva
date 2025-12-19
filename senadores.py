@@ -50,7 +50,6 @@ class ScrapearSenado:
                 cols = fila.find_all('td')
                 if len(cols) >= 4:
                     nombre = "S/D"
-                    # En el listado general, el nombre suele venir bien (NOMBRE APELLIDO) en el title
                     link_nombre = cols[1].find('a', href=True)
                     if link_nombre and link_nombre.has_attr('title'):
                         nombre = link_nombre['title'].strip().upper()
@@ -76,7 +75,6 @@ class ScrapearSenado:
             
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
 
-            # 1. PROYECTO
             proyecto_texto = "S/D"
             try:
                 tabla_encabezado = soup.find('table', class_='table-bordered')
@@ -96,7 +94,6 @@ class ScrapearSenado:
                                 proyecto_texto = texto_crudo
             except: pass
 
-            # 2. AUTOR (Con logica de inversion de nombre)
             autor_principal = "S/D"
             try:
                 div_autores = soup.find('div', id='Autores')
@@ -114,21 +111,17 @@ class ScrapearSenado:
                         if td:
                             raw_text = self.limpiar_texto(td.text)
                     
-                    # --- CORRECCION CRUCIAL: APELLIDO, NOMBRE -> NOMBRE APELLIDO ---
                     if "," in raw_text:
                         partes = raw_text.split(",")
                         if len(partes) == 2:
-                            # Invertimos: Parte 2 (Nombre) + Parte 1 (Apellido)
                             autor_principal = f"{partes[1].strip()} {partes[0].strip()}".upper()
                         else:
                             autor_principal = raw_text.upper()
                     else:
                         autor_principal = raw_text.upper()
-                    # ----------------------------------------------------------------
 
             except: pass
 
-            # 3. FECHA
             fecha = "S/D"
             try:
                 div_tramite = soup.find('div', id='tramiteLegislativo')
@@ -139,7 +132,6 @@ class ScrapearSenado:
                         fecha = self.limpiar_texto(texto_fecha).replace('-', '/')
             except: pass
 
-            # 4. COMISIONES
             lista_comisiones = []
             try:
                 div_tramite = soup.find('div', id='tramiteLegislativo')
@@ -189,15 +181,14 @@ class ScrapearSenado:
             print("3. Esperando resultados...")
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
-            # DESCOMENTAR PARA TRAER MAS DATOS
-            # print("4. Filtrando 100 resultados...")
-            # try:
-            #     select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
-            #     select = Select(select_element)
-            #     select.select_by_value("100")
-            #     time.sleep(5) 
-            #     wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            # except: pass
+            print("4. Filtrando 100 resultados...")
+            try:
+                select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
+                select = Select(select_element)
+                select.select_by_value("100")
+                time.sleep(5) 
+                wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+            except: pass
 
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
@@ -238,7 +229,6 @@ class ScrapearSenado:
             info = self.extraer_detalle_proyecto(item['url'])
             
             if info:
-                # Busqueda en diccionario
                 datos_extra = self.mapa_datos_senadores.get(info['Autor'], {'partido': '', 'provincia': ''})
 
                 self.data.append({
