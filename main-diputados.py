@@ -10,7 +10,7 @@ from analisis import AnalistaLegislativo
 if __name__ == "__main__":
     
     sender = MensajeSender()
-    print("--- Iniciando Workflow Diputados (Modo Seguro con add_rows) ---")
+    print("--- Iniciando Workflow Diputados ---")
     
     try:
         url_objetivo = "https://www.diputados.gov.ar/proyectos/"
