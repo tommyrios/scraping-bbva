@@ -111,14 +111,7 @@ class ScrapearSenado:
                         if td:
                             raw_text = self.limpiar_texto(td.text)
                     
-                    if "," in raw_text:
-                        partes = raw_text.split(",")
-                        if len(partes) == 2:
-                            autor_principal = f"{partes[1].strip()} {partes[0].strip()}".upper()
-                        else:
-                            autor_principal = raw_text.upper()
-                    else:
-                        autor_principal = raw_text.upper()
+                    autor_principal = raw_text.strip().upper()
 
             except: pass
 
@@ -218,9 +211,8 @@ class ScrapearSenado:
             items_unicos = {item['url']: item for item in items_a_procesar}.values()
             print(f"Se encontraron {len(items_unicos)} proyectos únicos.")
 
-        except Exception:
-            print("Error critico en navegacion.")
-            print(traceback.format_exc())
+        except Exception as e:
+            print(f"Error critico en navegacion: {e}")
             self.driver.quit()
             return pd.DataFrame()
 
@@ -229,12 +221,20 @@ class ScrapearSenado:
             info = self.extraer_detalle_proyecto(item['url'])
             
             if info:
-                datos_extra = self.mapa_datos_senadores.get(info['Autor'], {'partido': '', 'provincia': ''})
+                autor_para_mostrar = info['Autor']
+                autor_para_buscar = autor_para_mostrar
+
+                if "," in autor_para_mostrar:
+                    partes = autor_para_mostrar.split(",")
+                    if len(partes) == 2:
+                        autor_para_buscar = f"{partes[1].strip()} {partes[0].strip()}"
+                
+                datos_extra = self.mapa_datos_senadores.get(autor_para_buscar, {'partido': '', 'provincia': ''})
 
                 self.data.append({
                     'Cámara de Origen': 'Senado',
                     'Expediente': item['id'],
-                    'Autor': info['Autor'],
+                    'Autor': autor_para_mostrar,
                     'Fecha de inicio': info['Fecha de inicio'],
                     'Proyecto': info['Proyecto'],
                     'Comisiones': info['Comisiones'],
@@ -248,4 +248,3 @@ class ScrapearSenado:
 
         self.driver.quit()
         return pd.DataFrame(self.data)
-    
