@@ -10,19 +10,18 @@ from analisis import AnalistaLegislativo
 if __name__ == "__main__":
     
     sender = MensajeSender()
-    print("--- Iniciando Workflow Senado ---")
+    print("--- Iniciando Workflow Senado (Modo Coordenadas Manuales) ---")
     
     try:
-        # 1. SCRAPING
         bot = ScrapearSenado()
         df_resultado = bot.scrape()
 
         if df_resultado is not None and not df_resultado.empty:
             df_resultado = df_resultado.iloc[::-1]
-            print(f"Scraping finalizado. {len(df_resultado)} proyectos.")
+            print(f"✅ Scraping finalizado. {len(df_resultado)} proyectos recolectados.")
         else:
-            print("El scraping no devolvió resultados.")
-            sender.enviar_difusion("⚠️ *Alerta Senado*: Sin datos web.")
+            print("⚠️ El scraping no devolvió resultados.")
+            sender.enviar_difusion("⚠️ *Alerta Senado*: No se obtuvieron datos de la web.")
             exit()
 
         print("-" * 50)
@@ -42,22 +41,22 @@ if __name__ == "__main__":
         wb = gc.open_by_url(URL_PLANILLA)
         sheet = wb.worksheet(NOMBRE_HOJA)
 
-        # 2. MAPEO EXHAUSTIVO
-        print("Leyendo planilla existente...")
+        print("Leyendo estructura actual de la hoja...")
         todos_los_datos = sheet.get_all_values()
         
+        cantidad_filas_actuales = len(todos_los_datos)
+        print(f"📊 La hoja tiene actualmente {cantidad_filas_actuales} filas ocupadas.")
+
         mapa_expedientes = {}
         ids_existentes_numeros = []
 
-        # Saltamos headers (fila 0)
         for i, fila in enumerate(todos_los_datos):
             if i == 0: continue 
             
-            # Aseguramos que la fila tenga suficientes columnas
             if len(fila) < 3: continue
 
             id_actual = str(fila[0]).strip()
-            exp_actual = str(fila[2]).strip()
+            exp_actual = str(fila[2]).strip() 
             
             if exp_actual:
                 mapa_expedientes[exp_actual] = {
@@ -75,22 +74,22 @@ if __name__ == "__main__":
         if ids_existentes_numeros:
             proximo_id = max(ids_existentes_numeros) + 1
         
-        print(f"Próximo ID disponible: PL{proximo_id:03d}")
+        print(f"ℹ️ Próximo ID a asignar: PL{proximo_id:03d}")
 
-        # 3. CLASIFICACIÓN
-        filas_para_agregar = []
-        filas_para_actualizar = [] 
+        operaciones_batch = [] 
         filas_nuevas_analisis = [] 
 
         contador_actualizados = 0
+        contador_nuevos = 0
         contador_omitidos = 0
+        
+        puntero_fila_nueva = cantidad_filas_actuales + 1
 
         for index, row in df_resultado.iterrows():
             exp_web = str(row['Expediente']).strip()
             fecha_web = str(row['Fecha de inicio']).strip()
 
             if exp_web in mapa_expedientes:
-                # --- ACTUALIZACIÓN ---
                 info_sheet = mapa_expedientes[exp_web]
                 fila_idx = info_sheet['indice_lista']
                 datos_viejos = info_sheet['datos']
@@ -99,32 +98,31 @@ if __name__ == "__main__":
 
                 if fecha_web != fecha_sheet:
                     id_orig = datos_viejos[0]
-                    # Recuperamos datos manuales con seguridad de indice
                     estado_orig = datos_viejos[7] if len(datos_viejos) > 7 else ""
                     prob_orig = datos_viejos[8] if len(datos_viejos) > 8 else ""
                     obs_orig = datos_viejos[11] if len(datos_viejos) > 11 else ""
 
                     fila_update = [
-                        id_orig,
-                        'Senado',
-                        row['Expediente'],
-                        row['Autor'],
-                        row['Fecha de inicio'],
-                        row['Proyecto'],
-                        row['Comisiones'],
-                        estado_orig,
-                        prob_orig,
-                        row['Partido Político'],
-                        row['Provincia'],
-                        obs_orig
+                        id_orig,            
+                        'Senado',           
+                        row['Expediente'],  
+                        row['Autor'],       
+                        row['Fecha de inicio'], 
+                        row['Proyecto'],    
+                        row['Comisiones'],  
+                        estado_orig,        
+                        prob_orig,          
+                        row['Partido Político'], 
+                        row['Provincia'],   
+                        obs_orig            
                     ]
                     
                     fila_update = [str(x) if pd.notna(x) else "" for x in fila_update]
                     
-                    numero_fila_real = fila_idx + 1
+                    numero_fila_real = fila_idx + 1 
                     rango = f"A{numero_fila_real}:L{numero_fila_real}"
                     
-                    filas_para_actualizar.append({
+                    operaciones_batch.append({
                         'range': rango,
                         'values': [fila_update]
                     })
@@ -132,7 +130,6 @@ if __name__ == "__main__":
                 else:
                     contador_omitidos += 1
             else:
-                # --- NUEVO ---
                 id_str = f"PL{proximo_id:03d}"
                 fila_new = [
                     id_str,
@@ -142,35 +139,39 @@ if __name__ == "__main__":
                     row['Fecha de inicio'],
                     row['Proyecto'],
                     row['Comisiones'],
-                    '', '', # Estado/Probabilidad vacios
+                    '', '',
                     row['Partido Político'],
                     row['Provincia'],
                     ''
                 ]
                 fila_new = [str(x) if pd.notna(x) else "" for x in fila_new]
                 
-                filas_para_agregar.append(fila_new)
+                rango = f"A{puntero_fila_nueva}:L{puntero_fila_nueva}"
+                
+                operaciones_batch.append({
+                    'range': rango,
+                    'values': [fila_new]
+                })
+                
                 filas_nuevas_analisis.append(fila_new)
+                
                 proximo_id += 1
+                puntero_fila_nueva += 1
+                contador_nuevos += 1
 
-        # 4. ESCRITURA
-        if filas_para_actualizar:
-            print(f"🔄 Actualizando {len(filas_para_actualizar)} filas...")
-            sheet.batch_update(filas_para_actualizar)
+        if operaciones_batch:
+            print(f"💾 Guardando {len(operaciones_batch)} cambios en la planilla...")
+            sheet.batch_update(operaciones_batch)
+        else:
+            print("💤 No hubo cambios para guardar.")
 
-        if filas_para_agregar:
-            print(f"📝 Agregando {len(filas_para_agregar)} proyectos nuevos al final...")
-            # value_input_option='USER_ENTERED' ayuda a que Sheets interprete mejor los datos
-            sheet.append_rows(filas_para_agregar, value_input_option='USER_ENTERED')
-
-        # 5. REPORTE
         print("🤖 Solicitando análisis a Gemini...")
         analista = AnalistaLegislativo()
         texto_analisis = analista.analizar_proyectos(filas_nuevas_analisis)
 
         msg_final = (
             f"*Reporte Senado Diario*\n\n"
-            f"✅ *Nuevos:* {len(filas_para_agregar)}\n"
+            f"✅ *Nuevos:* {contador_nuevos}\n"
             f"🔄 *Actualizados:* {contador_actualizados}\n"
             f"⏭️ *Sin Cambios:* {contador_omitidos}\n\n"
             f"📝 *Análisis IA:*\n{texto_analisis}"
