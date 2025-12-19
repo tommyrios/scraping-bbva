@@ -43,16 +43,19 @@ class ScrapearSenado:
             tabla = soup.find('table', id='senadoresTabla')
             
             if not tabla:
+                print("❌ [DEBUG] No se encontró la tabla con id='senadoresTabla'")
                 return
 
             filas = tabla.find('tbody').find_all('tr')
+            print(f"ℹ️ [DEBUG] Filas encontradas en la lista: {len(filas)}")
             
-            for fila in filas:
+            for i, fila in enumerate(filas):
                 cols = fila.find_all('td')
                 if len(cols) >= 4:
                     nombre = "S/D"
                     link_nombre = cols[1].find('a', href=True)
                     if link_nombre and link_nombre.has_attr('title'):
+                        # ACA ESTA LA CLAVE: ¿Como viene el nombre del title?
                         nombre = link_nombre['title'].strip().upper()
                     
                     provincia = self.limpiar_texto(cols[2].text)
@@ -63,9 +66,14 @@ class ScrapearSenado:
                             'partido': partido,
                             'provincia': provincia
                         }
+                        # Imprimimos los primeros 3 para ver el formato
+                        if i < 3:
+                            print(f"   💾 [GUARDADO] Clave: '{nombre}' -> Partido: {partido}")
+
+            print(f"✅ [DEBUG] Diccionario cargado con {len(self.mapa_datos_senadores)} senadores.")
 
         except Exception as e:
-            print(f"Error obteniendo lista de senadores: {e}")
+            print(f"⚠️ Error obteniendo lista de senadores: {e}")
 
     def extraer_detalle_proyecto(self, url):
         try:
@@ -172,14 +180,15 @@ class ScrapearSenado:
             print("3. Esperando resultados...")
             wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
-            print("4. Filtrando 100 resultados...")
-            try:
-                select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
-                select = Select(select_element)
-                select.select_by_value("100")
-                time.sleep(5) 
-                wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            except: pass
+            # Comentado para test rápido
+            # print("4. Filtrando 100 resultados...")
+            # try:
+            #     select_element = wait.until(EC.presence_of_element_located((By.NAME, "cantRegistros")))
+            #     select = Select(select_element)
+            #     select.select_by_value("100")
+            #     time.sleep(5) 
+            #     wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+            # except: pass
 
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             filas = soup.find_all('tr')
@@ -220,7 +229,22 @@ class ScrapearSenado:
             info = self.extraer_detalle_proyecto(item['url'])
             
             if info:
-                datos_extra = self.mapa_datos_senadores.get(info['Autor'], {'partido': '', 'provincia': ''})
+                # --- ZONA DE DEBUGGING DE CRUCE ---
+                autor_proyecto = info['Autor']
+                datos_extra = self.mapa_datos_senadores.get(autor_proyecto, {'partido': '', 'provincia': ''})
+                
+                # CHIVATO: Si no encontro partido, mostramos por que
+                if datos_extra['partido'] == "":
+                    print(f"   ⚠️ [FALLO CRUCE] Autor Proyecto: '{autor_proyecto}'")
+                    # Mostramos si existe alguna clave parecida en el mapa (para ver si es tema de formato)
+                    match_cercano = [k for k in self.mapa_datos_senadores.keys() if k.split(',')[0] in autor_proyecto]
+                    if match_cercano:
+                        print(f"      -> Posible coincidencia en Diccionario: '{match_cercano[0]}'")
+                    else:
+                        print(f"      -> No se encontró nada parecido en el diccionario.")
+                else:
+                    print(f"   ✅ [CRUCE OK] {autor_proyecto} -> {datos_extra['partido']}")
+                # ----------------------------------
 
                 self.data.append({
                     'Cámara de Origen': 'Senado',
