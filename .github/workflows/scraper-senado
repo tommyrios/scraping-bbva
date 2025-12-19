@@ -1,0 +1,37 @@
+name: Scraper Senado (Dev)
+
+on:
+  schedule:
+    - cron: '38 10 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Instalar Google Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+
+      - name: Ejecutar Scraper Senado
+        env:
+          GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+          WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}    
+          WHATSAPP_API_KEY: ${{ secrets.WHATSAPP_API_KEY }}  
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  
+          
+        run: python main-senadores.py
