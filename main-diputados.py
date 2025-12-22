@@ -19,22 +19,21 @@ if __name__ == "__main__":
 
         if df_resultado is not None and not df_resultado.empty:
             df_resultado = df_resultado.iloc[::-1]
-            print(f"✅ Scraping finalizado. {len(df_resultado)} proyectos recolectados.")
+            print(f"✅ Scraping finalizado. {len(df_resultado)} proyectos.")
         else:
             print("⚠️ El scraping no devolvió resultados.")
-            sender.enviar_difusion("⚠️ *Alerta Diputados*: No se obtuvieron datos de la web.")
+            sender.enviar_difusion("⚠️ *Alerta Diputados*: No se obtuvieron datos.")
             exit()
 
         print("-" * 50)
-        print("Conectando con Google Sheets...")
-
+        
         if 'GCP_CREDENTIALS' in os.environ:
             json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
             scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
             creds = Credentials.from_service_account_info(json_creds, scopes=scopes)
             gc = gspread.authorize(creds)
         else:
-            raise Exception("No se encontró la variable de entorno GCP_CREDENTIALS")
+            raise Exception("Falta GCP_CREDENTIALS")
 
         URL_PLANILLA = "https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?gid=0#gid=0"
         NOMBRE_HOJA = "Proyectos"
@@ -42,18 +41,14 @@ if __name__ == "__main__":
         wb = gc.open_by_url(URL_PLANILLA)
         sheet = wb.worksheet(NOMBRE_HOJA)
 
-        print("Leyendo estructura actual de la hoja...")
         todos_los_datos = sheet.get_all_values()
-        
         cantidad_filas_ocupadas = len(todos_los_datos)
-        print(f"📊 Filas ocupadas actualmente: {cantidad_filas_ocupadas}")
-
+        
         mapa_expedientes = {}
         ids_existentes_numeros = []
 
         for i, fila in enumerate(todos_los_datos):
             if i == 0: continue 
-            
             if len(fila) < 3: continue
 
             id_actual = str(fila[0]).strip()
@@ -62,6 +57,7 @@ if __name__ == "__main__":
             if exp_actual:
                 mapa_expedientes[exp_actual] = {
                     'indice_lista': i, 
+                    'fila_excel': i + 1,
                     'datos': fila
                 }
             
@@ -74,8 +70,6 @@ if __name__ == "__main__":
         proximo_id = 1
         if ids_existentes_numeros:
             proximo_id = max(ids_existentes_numeros) + 1
-        
-        print(f"ℹ️ Próximo ID a asignar: PL{proximo_id:03d}")
 
         operaciones_batch = [] 
         filas_nuevas_analisis = [] 
@@ -84,27 +78,24 @@ if __name__ == "__main__":
         contador_nuevos = 0
         contador_omitidos = 0
 
+        nuevos_reales = []
         for index, row in df_resultado.iterrows():
-            exp_web = str(row['Expediente']).strip()
-            if exp_web not in mapa_expedientes:
-                contador_nuevos += 1
-
-        if contador_nuevos > 0:
-            print(f"🧱 Agregando {contador_nuevos} filas vacías al final de la hoja...")
-            sheet.add_rows(contador_nuevos)
-            print("✅ Filas agregadas.")
-
-        puntero_fila_escritura = cantidad_filas_ocupadas + 1
+            if str(row['Expediente']).strip() not in mapa_expedientes:
+                nuevos_reales.append(row)
+        
+        if nuevos_reales:
+            print(f"🧱 Agregando {len(nuevos_reales)} filas vacías...")
+            sheet.add_rows(len(nuevos_reales))
+        
+        puntero_fila = cantidad_filas_ocupadas + 1
 
         for index, row in df_resultado.iterrows():
             exp_web = str(row['Expediente']).strip()
             fecha_web = str(row['Fecha de inicio']).strip()
 
             if exp_web in mapa_expedientes:
-                info_sheet = mapa_expedientes[exp_web]
-                fila_idx = info_sheet['indice_lista']
-                datos_viejos = info_sheet['datos']
-                
+                info = mapa_expedientes[exp_web]
+                datos_viejos = info['datos']
                 fecha_sheet = str(datos_viejos[4]).strip() if len(datos_viejos) > 4 else ""
 
                 if fecha_web != fecha_sheet:
@@ -114,24 +105,13 @@ if __name__ == "__main__":
                     obs = datos_viejos[11] if len(datos_viejos) > 11 else ""
 
                     fila_update = [
-                        id_orig,            
-                        'Diputados',        
-                        row['Expediente'],  
-                        row['Autor'],       
-                        row['Fecha de inicio'], 
-                        row['Proyecto'],    
-                        row['Comisiones'],  
-                        estado,             
-                        prob,              
-                        row['Partido Político'], 
-                        row['Provincia'],   
-                        obs                 
+                        id_orig, 'Diputados', row['Expediente'], row['Autor'],
+                        row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
+                        estado, prob, row['Partido Político'], row['Provincia'], obs
                     ]
                     fila_update = [str(x) if pd.notna(x) else "" for x in fila_update]
                     
-                    num_fila = fila_idx + 1
-                    rango = f"A{num_fila}:L{num_fila}"
-                    
+                    rango = f"A{info['fila_excel']}:L{info['fila_excel']}"
                     operaciones_batch.append({'range': rango, 'values': [fila_update]})
                     contador_actualizados += 1
                 else:
@@ -139,45 +119,56 @@ if __name__ == "__main__":
             else:
                 id_str = f"PL{proximo_id:03d}"
                 fila_new = [
-                    id_str,
-                    'Diputados',
-                    row['Expediente'],
-                    row['Autor'],
-                    row['Fecha de inicio'],
-                    row['Proyecto'],
-                    row['Comisiones'],
-                    '', '', 
-                    row['Partido Político'],
-                    row['Provincia'],
-                    ''
+                    id_str, 'Diputados', row['Expediente'], row['Autor'],
+                    row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
+                    '', '', row['Partido Político'], row['Provincia'], ''
                 ]
                 fila_new = [str(x) if pd.notna(x) else "" for x in fila_new]
                 
-                rango = f"A{puntero_fila_escritura}:L{puntero_fila_escritura}"
-                
+                rango = f"A{puntero_fila}:L{puntero_fila}"
                 operaciones_batch.append({'range': rango, 'values': [fila_new]})
                 
-                filas_nuevas_analisis.append(fila_new)
+                fila_meta = list(fila_new)
+                fila_meta.append(puntero_fila)
+                filas_nuevas_analisis.append(fila_meta)
                 
                 proximo_id += 1
-                puntero_fila_escritura += 1
+                puntero_fila += 1
+                contador_nuevos += 1
 
         if operaciones_batch:
-            print(f"💾 Guardando {len(operaciones_batch)} cambios en la planilla (Nuevos + Updates)...")
+            print(f"💾 Guardando {len(operaciones_batch)} cambios base...")
             sheet.batch_update(operaciones_batch, value_input_option='USER_ENTERED')
-        else:
-            print("💤 No hubo cambios para guardar.")
 
-        print("Solicitando análisis a Gemini...")
+        print("🤖 Solicitando análisis a Gemini...")
         analista = AnalistaLegislativo()
-        texto_analisis = analista.analizar_proyectos(filas_nuevas_analisis)
+        datos_para_ia = [f[:-1] for f in filas_nuevas_analisis]
+        texto_whatsapp, detalles_ia = analista.analizar_proyectos(datos_para_ia)
+
+        updates_ia = []
+        if detalles_ia:
+            print("🧠 Escribiendo análisis de IA en la planilla...")
+            mapa_id_fila = { f[0]: f[12] for f in filas_nuevas_analisis }
+
+            for item in detalles_ia:
+                id_interno = item.get('id_interno')
+                impacto = item.get('impacto', '')
+                justificacion = item.get('justificacion', '')
+                
+                if id_interno in mapa_id_fila:
+                    num_fila = mapa_id_fila[id_interno]
+                    updates_ia.append({'range': f"I{num_fila}", 'values': [[impacto]]})
+                    updates_ia.append({'range': f"L{num_fila}", 'values': [[f"IA: {justificacion}"]]})
+
+            if updates_ia:
+                sheet.batch_update(updates_ia, value_input_option='USER_ENTERED')
 
         msg_final = (
             f"*Reporte Diputados Diario*\n\n"
-            f"✅ *Nuevos:* {len(filas_nuevas_analisis)}\n"
+            f"✅ *Nuevos:* {contador_nuevos}\n"
             f"🔄 *Actualizados:* {contador_actualizados}\n"
             f"⏭️ *Omitidos:* {contador_omitidos}\n\n"
-            f"📝 *Análisis de Gemini*\n {texto_analisis}"
+            f"📝 *Resumen IA:*\n{texto_whatsapp}"
         )
 
         sender.enviar_difusion(msg_final)
