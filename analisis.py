@@ -60,9 +60,7 @@ class AnalistaLegislativo:
 
         # LISTA DE MODELOS DE RESPALDO (Si falla uno, prueba el otro)
         modelos_a_probar = [
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-002",
-            "gemini-1.5-flash-001",
+            "gemini-2.5-flash",
             "gemini-2.0-flash-exp"
         ]
 
