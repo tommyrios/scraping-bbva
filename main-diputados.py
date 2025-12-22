@@ -149,7 +149,7 @@ if __name__ == "__main__":
                 if id_interno in mapa_id_fila:
                     num_fila = mapa_id_fila[id_interno]
                     updates_ia.append({'range': f"I{num_fila}", 'values': [[impacto]]})
-                    updates_ia.append({'range': f"L{num_fila}", 'values': [[f"IA: {justificacion}"]]})
+                    updates_ia.append({'range': f"L{num_fila}", 'values': [[f"{justificacion}"]]})
 
             if updates_ia:
                 sheet.batch_update(updates_ia, value_input_option='USER_ENTERED')
