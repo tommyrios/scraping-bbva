@@ -58,69 +58,91 @@ class AnalistaLegislativo:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
         """
 
-        intentos_maximos = 3
-        espera = 10
+        # LISTA DE MODELOS DE RESPALDO (Si falla uno, prueba el otro)
+        modelos_a_probar = [
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-002",
+            "gemini-1.5-flash-001",
+            "gemini-2.0-flash-exp"
+        ]
 
-        for intento in range(intentos_maximos):
-            try:
-                response = self.client.models.generate_content(
-                    model="gemini-1.5-flash",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json"
+        intentos_maximos_por_modelo = 2
+        espera_base = 5
+
+        for modelo in modelos_a_probar:
+            print(f"Probando modelo IA: {modelo}...")
+            
+            for intento in range(intentos_maximos_por_modelo):
+                try:
+                    response = self.client.models.generate_content(
+                        model=modelo,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        )
                     )
-                )
-                
-                data = json.loads(response.text)
-                detalles = data.get("analisis_individual", [])
-                resumen = data.get("resumen_general", "Sin resumen general.")
+                    
+                    # Si llegamos aca, funcionó
+                    data = json.loads(response.text)
+                    detalles = data.get("analisis_individual", [])
+                    resumen = data.get("resumen_general", "Sin resumen general.")
 
-                mensaje_whatsapp = f"📢 *Resumen Ejecutivo:*\n{resumen}\n\n"
-                
-                altos = [d for d in detalles if d.get('impacto') == 'ALTO']
-                medios = [d for d in detalles if d.get('impacto') == 'MEDIO']
-                bajos = [d for d in detalles if d.get('impacto') == 'BAJO']
+                    mensaje_whatsapp = f"📢 *Resumen Ejecutivo:*\n{resumen}\n\n"
+                    
+                    altos = [d for d in detalles if d.get('impacto') == 'ALTO']
+                    medios = [d for d in detalles if d.get('impacto') == 'MEDIO']
+                    bajos = [d for d in detalles if d.get('impacto') == 'BAJO']
 
-                if altos:
-                    mensaje_whatsapp += "🚨 *ALERTA: IMPACTO ALTO*\n"
-                    for p in altos:
-                        id_ref = p.get('id_interno')
-                        titulo_real = titulos_por_id.get(id_ref, "Proyecto")
-                        titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
-                        expediente = p.get('expediente', '')
-                        
-                        mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
-                        mensaje_whatsapp += f"  _👉 {p.get('justificacion')}_\n\n"
+                    if altos:
+                        mensaje_whatsapp += "🚨 *ALERTA: IMPACTO ALTO*\n"
+                        for p in altos:
+                            id_ref = p.get('id_interno')
+                            titulo_real = titulos_por_id.get(id_ref, "Proyecto")
+                            titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
+                            expediente = p.get('expediente', '')
+                            
+                            mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
+                            mensaje_whatsapp += f"  _👉 {p.get('justificacion')}_\n\n"
 
-                if medios:
-                    mensaje_whatsapp += "⚠️ *Impacto Medio / Monitorear*\n"
-                    for p in medios:
-                        id_ref = p.get('id_interno')
-                        titulo_real = titulos_por_id.get(id_ref, "Proyecto")
-                        titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
-                        expediente = p.get('expediente', '')
-                        
-                        mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
-                        mensaje_whatsapp += f"  _{p.get('justificacion')}_\n"
-                    mensaje_whatsapp += "\n"
+                    if medios:
+                        mensaje_whatsapp += "⚠️ *Impacto Medio / Monitorear*\n"
+                        for p in medios:
+                            id_ref = p.get('id_interno')
+                            titulo_real = titulos_por_id.get(id_ref, "Proyecto")
+                            titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
+                            expediente = p.get('expediente', '')
+                            
+                            mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
+                            mensaje_whatsapp += f"  _{p.get('justificacion')}_\n"
+                        mensaje_whatsapp += "\n"
 
-                if bajos:
-                    mensaje_whatsapp += f"📉 *Proyectos de Impacto Bajo/Nulo:* {len(bajos)}\n"
+                    if bajos:
+                        mensaje_whatsapp += f"📉 *Proyectos de Impacto Bajo/Nulo:* {len(bajos)}\n"
 
-                if not altos and not medios:
-                    mensaje_whatsapp += "\n✅ *Sin riesgos regulatorios directos detectados hoy.*"
+                    if not altos and not medios:
+                        mensaje_whatsapp += "\n✅ *Sin riesgos regulatorios directos detectados hoy.*"
 
-                return mensaje_whatsapp, detalles
+                    return mensaje_whatsapp, detalles
 
-            except Exception as e:
-                error_str = str(e)
-                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    if intento < intentos_maximos - 1:
-                        time.sleep(espera)
-                        espera *= 2 
-                        continue
-                
-                print(f"Error en Gemini: {e}")
-                return "Error al generar análisis con IA.", []
+                except Exception as e:
+                    error_str = str(e)
+                    
+                    # Si es error 404 (Modelo no encontrado), rompemos el loop de reintentos 
+                    # y pasamos al SIGUIENTE MODELO de la lista principal
+                    if "404" in error_str or "NOT_FOUND" in error_str:
+                        print(f"Modelo {modelo} no encontrado (404). Pasando al siguiente...")
+                        break 
+                    
+                    # Si es error 429 (Cuota), esperamos y reintentamos EL MISMO modelo
+                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                        if intento < intentos_maximos_por_modelo - 1:
+                            tiempo_espera = espera_base * (intento + 1)
+                            print(f"Cuota excedida ({modelo}). Reintentando en {tiempo_espera}s...")
+                            time.sleep(tiempo_espera)
+                            continue
+                    
+                    print(f"Error desconocido en Gemini ({modelo}): {e}")
+                    # Si es otro error, tambien probamos el siguiente modelo por las dudas
+                    break 
         
-        return "Error: Gemini no respondió tras varios intentos.", []
+        return "Error: Ningún modelo de IA respondió correctamente.", []
