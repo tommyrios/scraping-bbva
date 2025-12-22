@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from google import genai
 from google.genai import types
 
@@ -49,21 +50,35 @@ class AnalistaLegislativo:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
         """
 
-        try:
-            response = self.client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
-                )
-            )
-            
-            data = json.loads(response.text)
-            texto_wa = data.get("resumen_whatsapp", "Análisis completado.")
-            detalles = data.get("analisis_individual", [])
-            
-            return texto_wa, detalles
+        intentos_maximos = 5
+        espera = 15
 
-        except Exception as e:
-            print(f"Error en Gemini: {e}")
-            return "Error al generar análisis.", []
+        for intento in range(intentos_maximos):
+            try:
+                response = self.client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
+                )
+                
+                data = json.loads(response.text)
+                texto_wa = data.get("resumen_whatsapp", "Análisis completado.")
+                detalles = data.get("analisis_individual", [])
+                
+                return texto_wa, detalles
+
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    if intento < intentos_maximos - 1:
+                        print(f"Cuota Gemini excedida. Reintentando en {espera} segundos...")
+                        time.sleep(espera)
+                        espera *= 2 
+                        continue
+                
+                print(f"Error en Gemini: {e}")
+                return "Error al generar análisis con IA.", []
+        
+        return "Error: Gemini no respondió tras varios intentos.", []
