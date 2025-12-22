@@ -10,7 +10,6 @@ from analisis import AnalistaLegislativo
 if __name__ == "__main__":
     
     sender = MensajeSender()
-    print("--- Iniciando Workflow Diputados ---")
     
     try:
         url_objetivo = "https://www.diputados.gov.ar/proyectos/"
@@ -19,21 +18,17 @@ if __name__ == "__main__":
 
         if df_resultado is not None and not df_resultado.empty:
             df_resultado = df_resultado.iloc[::-1]
-            print(f"✅ Scraping finalizado. {len(df_resultado)} proyectos.")
         else:
-            print("⚠️ El scraping no devolvió resultados.")
-            sender.enviar_difusion("⚠️ *Alerta Diputados*: No se obtuvieron datos.")
+            sender.enviar_difusion("⚠️ *Alerta Diputados*: No se obtuvieron datos de la web.")
             exit()
 
-        print("-" * 50)
-        
         if 'GCP_CREDENTIALS' in os.environ:
             json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
             scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
             creds = Credentials.from_service_account_info(json_creds, scopes=scopes)
             gc = gspread.authorize(creds)
         else:
-            raise Exception("Falta GCP_CREDENTIALS")
+            raise Exception("No se encontró la variable de entorno GCP_CREDENTIALS")
 
         URL_PLANILLA = "https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?gid=0#gid=0"
         NOMBRE_HOJA = "Proyectos"
@@ -84,7 +79,6 @@ if __name__ == "__main__":
                 nuevos_reales.append(row)
         
         if nuevos_reales:
-            print(f"🧱 Agregando {len(nuevos_reales)} filas vacías...")
             sheet.add_rows(len(nuevos_reales))
         
         puntero_fila = cantidad_filas_ocupadas + 1
@@ -137,17 +131,14 @@ if __name__ == "__main__":
                 contador_nuevos += 1
 
         if operaciones_batch:
-            print(f"💾 Guardando {len(operaciones_batch)} cambios base...")
             sheet.batch_update(operaciones_batch, value_input_option='USER_ENTERED')
 
-        print("🤖 Solicitando análisis a Gemini...")
         analista = AnalistaLegislativo()
         datos_para_ia = [f[:-1] for f in filas_nuevas_analisis]
         texto_whatsapp, detalles_ia = analista.analizar_proyectos(datos_para_ia)
 
         updates_ia = []
         if detalles_ia:
-            print("🧠 Escribiendo análisis de IA en la planilla...")
             mapa_id_fila = { f[0]: f[12] for f in filas_nuevas_analisis }
 
             for item in detalles_ia:
@@ -158,7 +149,7 @@ if __name__ == "__main__":
                 if id_interno in mapa_id_fila:
                     num_fila = mapa_id_fila[id_interno]
                     updates_ia.append({'range': f"I{num_fila}", 'values': [[impacto]]})
-                    updates_ia.append({'range': f"L{num_fila}", 'values': [[f"{justificacion}"]]})
+                    updates_ia.append({'range': f"L{num_fila}", 'values': [[f"IA: {justificacion}"]]})
 
             if updates_ia:
                 sheet.batch_update(updates_ia, value_input_option='USER_ENTERED')
@@ -168,11 +159,10 @@ if __name__ == "__main__":
             f"✅ *Nuevos:* {contador_nuevos}\n"
             f"🔄 *Actualizados:* {contador_actualizados}\n"
             f"⏭️ *Omitidos:* {contador_omitidos}\n\n"
-            f"📝 *Resumen IA:*\n{texto_whatsapp}"
+            f"{texto_whatsapp}"
         )
 
         sender.enviar_difusion(msg_final)
-        print("✅ Fin del proceso.")
 
     except Exception as e:
         err_msg = f"❌ *Error Crítico Diputados*\n\n{str(e)}"

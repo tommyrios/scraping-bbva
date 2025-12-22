@@ -23,7 +23,6 @@ class AnalistaLegislativo:
         for fila in filas_nuevas:
             id_interno = fila[0]
             titulo = fila[5]
-            
             titulos_por_id[id_interno] = titulo
             
             item = {
@@ -35,24 +34,25 @@ class AnalistaLegislativo:
 
         prompt = f"""
         Eres un analista de riesgos legislativos para Banco BBVA.
-        Analiza estos proyectos de ley y devuelve un objeto JSON.
-
-        Criterios:
-        - ALTO: Regula tasas, comisiones, impuestos bancarios, datos personales, tarjetas.
-        - MEDIO: Impacto indirecto económico, pymes o laboral.
-        - BAJO: Declaraciones, efemérides, temas ajenos al sector.
-
-        Formato JSON requerido:
+        Analiza estos proyectos de ley y devuelve un objeto JSON con este formato exacto:
+        
         {{
-            "resumen_general": "Párrafo de 3 lineas con la conclusión general del día.",
+            "resumen_general": "Un párrafo de 3 líneas resumiendo la tendencia del día (ej: 'Se presentaron normas sobre tarjetas de crédito y regulaciones laborales...').",
             "analisis_individual": [
                 {{
                     "id_interno": "PLxxx",
-                    "impacto": "ALTO, MEDIO o BAJO",
-                    "justificacion": "Explicación técnica de 1 oración."
+                    "expediente": "123-D-2024",
+                    "impacto": "ALTO", 
+                    "justificacion": "Explicación técnica de 1 oración sobre el riesgo financiero."
                 }}
             ]
         }}
+
+        IMPORTANTE:
+        - Impacto ALTO: Regula tasas, comisiones, impuestos bancarios, datos personales, defensa consumidor.
+        - Impacto MEDIO: Impacto indirecto económico, pymes o laboral.
+        - Impacto BAJO: Declaraciones de interés, efemérides, temas ajenos al sector.
+        - La 'justificacion' debe ser útil para un gerente de banco.
 
         Proyectos:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
@@ -73,39 +73,42 @@ class AnalistaLegislativo:
                 
                 data = json.loads(response.text)
                 detalles = data.get("analisis_individual", [])
-                resumen = data.get("resumen_general", "Sin resumen.")
+                resumen = data.get("resumen_general", "Sin resumen general.")
 
                 mensaje_whatsapp = f"📢 *Resumen Ejecutivo:*\n{resumen}\n\n"
                 
-                hay_alertas = False
-                
-                proyectos_alto = [d for d in detalles if d.get('impacto') == 'ALTO']
-                proyectos_medio = [d for d in detalles if d.get('impacto') == 'MEDIO']
-                
-                if proyectos_alto:
+                altos = [d for d in detalles if d.get('impacto') == 'ALTO']
+                medios = [d for d in detalles if d.get('impacto') == 'MEDIO']
+                bajos = [d for d in detalles if d.get('impacto') == 'BAJO']
+
+                if altos:
                     mensaje_whatsapp += "🚨 *ALERTA: IMPACTO ALTO*\n"
-                    for p in proyectos_alto:
+                    for p in altos:
                         id_ref = p.get('id_interno')
                         titulo_real = titulos_por_id.get(id_ref, "Proyecto")
-                        titulo_corto = (titulo_real[:75] + '...') if len(titulo_real) > 75 else titulo_real
+                        titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
+                        expediente = p.get('expediente', '')
                         
-                        mensaje_whatsapp += f"• *{p.get('expediente')}*: {titulo_corto}\n"
+                        mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
                         mensaje_whatsapp += f"  _👉 {p.get('justificacion')}_\n\n"
-                    hay_alertas = True
 
-                if proyectos_medio:
+                if medios:
                     mensaje_whatsapp += "⚠️ *Impacto Medio / Monitorear*\n"
-                    for p in proyectos_medio:
+                    for p in medios:
                         id_ref = p.get('id_interno')
                         titulo_real = titulos_por_id.get(id_ref, "Proyecto")
-                        titulo_corto = (titulo_real[:75] + '...') if len(titulo_real) > 75 else titulo_real
+                        titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
+                        expediente = p.get('expediente', '')
                         
-                        mensaje_whatsapp += f"• {titulo_corto}\n"
+                        mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
                         mensaje_whatsapp += f"  _{p.get('justificacion')}_\n"
-                    hay_alertas = True
+                    mensaje_whatsapp += "\n"
 
-                if not hay_alertas:
-                    mensaje_whatsapp += "✅ *Sin riesgos regulatorios directos detectados hoy.*"
+                if bajos:
+                    mensaje_whatsapp += f"📉 *Proyectos de Impacto Bajo/Nulo:* {len(bajos)}\n"
+
+                if not altos and not medios:
+                    mensaje_whatsapp += "\n✅ *Sin riesgos regulatorios directos detectados hoy.*"
 
                 return mensaje_whatsapp, detalles
 
@@ -113,7 +116,6 @@ class AnalistaLegislativo:
                 error_str = str(e)
                 if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                     if intento < intentos_maximos - 1:
-                        print(f"Cuota Gemini excedida. Reintentando en {espera}s...")
                         time.sleep(espera)
                         espera *= 2 
                         continue
