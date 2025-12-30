@@ -1,75 +1,67 @@
 import os
-import time
-import requests
-import urllib.parse
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 class MensajeSender:
     def __init__(self):
-        self.api_key = os.environ.get('WHATSAPP_API_KEY')
-        self.destinatarios = []
-        
-        if 'WHATSAPP_PHONE' in os.environ:
-            self.destinatarios.append(os.environ['WHATSAPP_PHONE'])
+        self.email_user = os.environ.get("EMAIL_USER")
+        self.email_pass = os.environ.get("EMAIL_PASSWORD")
+        self.email_destinatario = os.environ.get("EMAIL_DESTINATARIO")
 
-    def agregar_destinatario(self, numero):
-        if numero not in self.destinatarios:
-            self.destinatarios.append(numero)
-
-    def dividir_mensaje(self, texto, limite=800):
-        """Divide un texto largo en fragmentos más pequeños para que pasen por la URL"""
-        if len(texto) <= limite:
-            return [texto]
+    def formatear_mensaje_a_html(self, texto):
+        """
+        Convierte el formato simple de WhatsApp (*negrita*, saltos) a HTML para correo.
+        """
+        if not texto: return ""
         
-        partes = []
-        while texto:
-            corte = texto[:limite]
-            ultimo_salto = corte.rfind('\n')
-            
-            if ultimo_salto > 0 and len(texto) > limite:
-                partes.append(texto[:ultimo_salto])
-                texto = texto[ultimo_salto:].strip()
+        html = texto.replace("\n", "<br>")
+        
+        partes = html.split('*')
+        nuevo_texto = ""
+        for i, parte in enumerate(partes):
+            if i % 2 == 0:
+                nuevo_texto += parte
             else:
-                partes.append(corte)
-                texto = texto[limite:].strip()
-        return partes
+                nuevo_texto += f"<b>{parte}</b>"
+        
+        return f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px;">
+                <h2 style="color: #0044cc;">🏛️ Reporte Legislativo IA</h2>
+                <div style="background-color: white; padding: 15px; border-radius: 5px; border-left: 5px solid #0044cc;">
+                    {nuevo_texto}
+                </div>
+                <p style="font-size: 12px; color: #777; margin-top: 20px;">
+                    Reporte generado automáticamente por Gemini y GitHub Actions.
+                </p>
+            </div>
+          </body>
+        </html>
+        """
 
     def enviar_difusion(self, mensaje):
-        if not self.api_key:
-            print("Error: No hay API KEY de WhatsApp configurada.")
+        if not self.email_user or not self.email_pass or not self.email_destinatario:
+            print("⚠️ Error: Faltan credenciales de Email (EMAIL_USER, EMAIL_PASSWORD, EMAIL_DESTINATARIO)")
             return
 
-        if not self.destinatarios:
-            print("Error: No hay destinatarios configurados.")
-            return
+        print("📧 Preparando envío de correo...")
 
-        print(f"Iniciando difusión a {len(self.destinatarios)} destinatarios...")
-        
-        base_url = "https://api.callmebot.com/whatsapp.php"
+        msg = MIMEMultipart()
+        msg["From"] = f"Bot Legislativo <{self.email_user}>"
+        msg["To"] = self.email_destinatario
+        msg["Subject"] = "📜 Reporte Diario de Proyectos (Diputados/Senado)"
 
-        fragmentos = self.dividir_mensaje(mensaje, limite=800)
+        cuerpo_html = self.formatear_mensaje_a_html(mensaje)
+        msg.attach(MIMEText(cuerpo_html, "html"))
 
-        for telefono in self.destinatarios:
-            try:
-                for i, fragmento in enumerate(fragmentos):
-                    
-                    texto_final = fragmento
-                    if len(fragmentos) > 1:
-                        texto_final = f"📄 *Parte {i+1}/{len(fragmentos)}*\n\n{fragmento}"
-
-                    params = {
-                        'phone': telefono,
-                        'apikey': self.api_key,
-                        'text': texto_final
-                    }
-                    
-                    response = requests.get(base_url, params=params, timeout=20)
-                    
-                    if response.status_code == 200 and "ERROR" not in response.text:
-                        print(f"✅ Enviado a {telefono} (Parte {i+1}): {response.text}")
-                    else:
-                        print(f"⚠️ Error enviando parte {i+1} a {telefono}: {response.text}")
-                    
-                    time.sleep(2)
-
-            except Exception as e:
-                print(f"❌ Error crítico enviando a {telefono}: {e}")
+        context = ssl.create_default_context()
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+                server.login(self.email_user, self.email_pass)
+                server.sendmail(self.email_user, self.email_destinatario, msg.as_string())
+            print("✅ Correo enviado exitosamente.")
+        except Exception as e:
+            print(f"❌ Error al enviar correo: {e}")
