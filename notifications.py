@@ -8,16 +8,14 @@ class MensajeSender:
     def __init__(self):
         self.email_user = os.environ.get("EMAIL_USER")
         self.email_pass = os.environ.get("EMAIL_PASSWORD")
-        self.email_destinatario = os.environ.get("EMAIL_DESTINATARIO")
+        # Aquí recibimos la cadena "mail1, mail2, mail3"
+        self.email_destinatarios_str = os.environ.get("EMAIL_DESTINATARIO")
 
     def formatear_mensaje_a_html(self, texto):
-        """
-        Convierte el formato simple de WhatsApp (*negrita*, saltos) a HTML para correo.
-        """
         if not texto: return ""
         
+        # Convertir formato WhatsApp (*negrita*, saltos) a HTML
         html = texto.replace("\n", "<br>")
-        
         partes = html.split('*')
         nuevo_texto = ""
         for i, parte in enumerate(partes):
@@ -43,15 +41,19 @@ class MensajeSender:
         """
 
     def enviar_difusion(self, mensaje):
-        if not self.email_user or not self.email_pass or not self.email_destinatario:
-            print("⚠️ Error: Faltan credenciales de Email (EMAIL_USER, EMAIL_PASSWORD, EMAIL_DESTINATARIO)")
+        if not self.email_user or not self.email_pass or not self.email_destinatarios_str:
+            print("⚠️ Error: Faltan credenciales de Email.")
             return
 
-        print("📧 Preparando envío de correo...")
+        print("📧 Preparando envío de correos...")
+
+        # 1. Crear la lista de correos (separa por comas y quita espacios extra)
+        lista_emails = [e.strip() for e in self.email_destinatarios_str.split(',')]
 
         msg = MIMEMultipart()
         msg["From"] = f"Bot Legislativo <{self.email_user}>"
-        msg["To"] = self.email_destinatario
+        # En el encabezado "To" ponemos todos juntos para que se vea a quién se envió
+        msg["To"] = self.email_destinatarios_str 
         msg["Subject"] = "📜 Reporte Diario de Proyectos (Diputados/Senado)"
 
         cuerpo_html = self.formatear_mensaje_a_html(mensaje)
@@ -61,7 +63,10 @@ class MensajeSender:
         try:
             with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
                 server.login(self.email_user, self.email_pass)
-                server.sendmail(self.email_user, self.email_destinatario, msg.as_string())
-            print("✅ Correo enviado exitosamente.")
+                
+                # 2. Enviar a la LISTA de destinatarios
+                server.sendmail(self.email_user, lista_emails, msg.as_string())
+                
+            print(f"✅ Correo enviado exitosamente a {len(lista_emails)} destinatarios.")
         except Exception as e:
             print(f"❌ Error al enviar correo: {e}")
