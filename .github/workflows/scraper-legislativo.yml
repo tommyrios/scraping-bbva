@@ -1,4 +1,4 @@
-name: Scraper Legislativo (Completo)
+name: Reporte Legislativo
 
 on:
   schedule:
@@ -8,13 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    env:
-      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      EMAIL_USER: ${{ secrets.EMAIL_USER }}
-      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-      EMAIL_DESTINATARIO: ${{ secrets.EMAIL_DESTINATARIO }}
 
     steps:
       - name: Checkout del código
@@ -34,9 +27,11 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Correr Scraper Senado
-        run: python main-senadores.py
-
-      - name: Correr Scraper Diputados
-        if: always() 
-        run: python main-diputados.py
+      - name: Reporte Legislativo 
+        env:
+          GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_DESTINATARIO: ${{ secrets.EMAIL_DESTINATARIO }}
+        run: python main.py
