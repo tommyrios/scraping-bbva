@@ -9,8 +9,21 @@ from senadores import ScrapearSenado
 from analisis import AnalistaLegislativo
 
 def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
+    """
+    Carga datos en Sheet y devuelve estadísticas y filas para analizar.
+    NO genera texto de reporte, solo devuelve datos crudos.
+    """
+    stats = {
+        "origen": nombre_origen,
+        "nuevos": 0,
+        "reanalizados": 0,
+        "omitidos": 0,
+        "error": None
+    }
+    
     if df_nuevos is None or df_nuevos.empty:
-        return f"⚠️ *{nombre_origen}:* No se obtuvieron datos o la web estaba caída.\n"
+        stats["error"] = "Sin datos web"
+        return stats, []
 
     todos_los_datos = hoja_sheet.get_all_values()
     cantidad_filas_ocupadas = len(todos_los_datos)
@@ -45,11 +58,6 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
     operaciones_batch = [] 
     filas_para_analizar = [] 
 
-    contador_actualizados = 0
-    contador_nuevos = 0
-    contador_recuperados_ia = 0
-    contador_omitidos = 0
-
     nuevos_reales = []
     for index, row in df_nuevos.iterrows():
         if str(row['Expediente']).strip() not in mapa_expedientes:
@@ -71,7 +79,7 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
             obs_actual = str(datos_viejos[11]).strip() if len(datos_viejos) > 11 else ""
             
             if not obs_actual or "Error" in obs_actual:
-                contador_recuperados_ia += 1
+                stats["reanalizados"] += 1
                 fila_reconstruida = [
                     datos_viejos[0], nombre_origen, row['Expediente'], row['Autor'],
                     row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
@@ -95,9 +103,8 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
                 
                 rango = f"A{info['fila_excel']}:L{info['fila_excel']}"
                 operaciones_batch.append({'range': rango, 'values': [fila_update]})
-                contador_actualizados += 1
             else:
-                contador_omitidos += 1
+                stats["omitidos"] += 1
         else:
             id_str = f"PL{proximo_id:03d}"
             fila_new = [
@@ -116,38 +123,12 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
             
             proximo_id += 1
             puntero_fila += 1
-            contador_nuevos += 1
+            stats["nuevos"] += 1
 
     if operaciones_batch:
         hoja_sheet.batch_update(operaciones_batch, value_input_option='USER_ENTERED')
-
-    analista = AnalistaLegislativo()
-    datos_para_ia = [f[:-1] for f in filas_para_analizar]
-    texto_analisis, detalles_ia = analista.analizar_proyectos(datos_para_ia)
-
-    updates_ia = []
-    if detalles_ia:
-        mapa_id_fila = { f[0]: f[12] for f in filas_para_analizar }
-        for item in detalles_ia:
-            id_interno = item.get('id_interno')
-            impacto = item.get('impacto', '')
-            justificacion = item.get('justificacion', '')
-            
-            if id_interno in mapa_id_fila:
-                num_fila = mapa_id_fila[id_interno]
-                updates_ia.append({'range': f"I{num_fila}", 'values': [[impacto]]})
-                updates_ia.append({'range': f"L{num_fila}", 'values': [[justificacion]]})
-
-        if updates_ia:
-            hoja_sheet.batch_update(updates_ia, value_input_option='USER_ENTERED')
-
-    reporte = (
-        f"🏛️ *Cámara de {nombre_origen}*\n"
-        f"✅ Nuevos: {contador_nuevos} | ♻️ Re-analizados: {contador_recuperados_ia}\n\n"
-        f"{texto_analisis}\n"
-        f"----------------------------------------\n\n"
-    )
-    return reporte
+        
+    return stats, filas_para_analizar
 
 if __name__ == "__main__":
     print("--- Iniciando Proceso Unificado Congreso ---")
@@ -167,31 +148,82 @@ if __name__ == "__main__":
         wb = gc.open_by_url(URL_PLANILLA)
         sheet = wb.worksheet(NOMBRE_HOJA)
 
-        reporte_final = "*📢 Reporte Diario del Congreso Argentino*\n\n"
+        todas_filas_para_ia = []
+        texto_estadisticas = "*📊 Reporte de Actividad Diaria*\n\n"
 
-        print(">>> Iniciando Diputados...")
+        print(">>> Procesando Diputados...")
         try:
             bot_dip = ScrapearDiputados()
             df_dip = bot_dip.scrape("https://www.diputados.gov.ar/proyectos/")
             if df_dip is not None and not df_dip.empty:
                 df_dip = df_dip.iloc[::-1]
-            reporte_final += procesar_datos(df_dip, sheet, "Diputados")
+            
+            stats_dip, filas_dip = procesar_datos(df_dip, sheet, "Diputados")
+            todas_filas_para_ia.extend(filas_dip)
+            
+            if stats_dip['error']:
+                texto_estadisticas += f"🏛️ *Diputados:* ⚠️ {stats_dip['error']}\n"
+            else:
+                texto_estadisticas += (
+                    f"🏛️ *Diputados:*\n"
+                    f"   ✅ Nuevos: {stats_dip['nuevos']} | ♻️ Re-analizados: {stats_dip['reanalizados']}\n"
+                )
+
         except Exception as e:
             print(f"Error Diputados: {e}")
-            reporte_final += f"⚠️ *Diputados:* Error al procesar: {str(e)}\n\n"
+            texto_estadisticas += f"🏛️ *Diputados:* ❌ Error crítico ({str(e)})\n"
 
-        print(">>> Iniciando Senado...")
+        print(">>> Procesando Senado...")
         try:
             bot_sen = ScrapearSenado()
             df_sen = bot_sen.scrape()
             if df_sen is not None and not df_sen.empty:
                 df_sen = df_sen.iloc[::-1]
-            reporte_final += procesar_datos(df_sen, sheet, "Senado")
+            
+            stats_sen, filas_sen = procesar_datos(df_sen, sheet, "Senado")
+            todas_filas_para_ia.extend(filas_sen)
+
+            if stats_sen['error']:
+                texto_estadisticas += f"🏛️ *Senado:* ⚠️ {stats_sen['error']}\n"
+            else:
+                texto_estadisticas += (
+                    f"🏛️ *Senado:*\n"
+                    f"   ✅ Nuevos: {stats_sen['nuevos']} | ♻️ Re-analizados: {stats_sen['reanalizados']}\n"
+                )
+
         except Exception as e:
             print(f"Error Senado: {e}")
-            reporte_final += f"⚠️ *Senado:* Error al procesar: {str(e)}\n\n"
+            texto_estadisticas += f"🏛️ *Senado:* ❌ Error crítico ({str(e)})\n"
 
-        print(">>> Enviando Email Unificado...")
+        texto_estadisticas += "\n----------------------------------------\n"
+
+        print(">>> Analizando con IA...")
+        analista = AnalistaLegislativo()
+        datos_para_ia = [f[:-1] for f in todas_filas_para_ia]
+        texto_analisis, detalles_ia = analista.analizar_proyectos(datos_para_ia)
+
+        updates_ia = []
+        if detalles_ia:
+            mapa_id_fila = { f[0]: f[12] for f in todas_filas_para_ia }
+            for item in detalles_ia:
+                id_interno = item.get('id_interno')
+                impacto = item.get('impacto', '')
+                justificacion = item.get('justificacion', '')
+                
+                if id_interno in mapa_id_fila:
+                    num_fila = mapa_id_fila[id_interno]
+                    updates_ia.append({'range': f"I{num_fila}", 'values': [[impacto]]})
+                    updates_ia.append({'range': f"L{num_fila}", 'values': [[justificacion]]})
+
+            if updates_ia:
+                sheet.batch_update(updates_ia, value_input_option='USER_ENTERED')
+
+        reporte_final = (
+            f"{texto_estadisticas}\n"
+            f"{texto_analisis}"
+        )
+
+        print(">>> Enviando Email...")
         sender.enviar_difusion(reporte_final)
         print("✅ Proceso finalizado.")
 

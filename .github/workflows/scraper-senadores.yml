@@ -1,9 +1,6 @@
 name: Scraper Senado
 
 on:
-  schedule:
-    - cron: '38 10 * * 1-5'
-  
   workflow_dispatch:
 
 jobs:

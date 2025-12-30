@@ -13,21 +13,37 @@ class AnalistaLegislativo:
         else:
             self.client = genai.Client(api_key=api_key)
 
+    def generar_link(self, origen, expediente):
+        exp_limpio = expediente.strip()
+        if "Diputados" in origen:
+            return f"https://www.google.com/search?q=site:diputados.gov.ar+%22{exp_limpio}%22"
+        elif "Senado" in origen:
+            return f"https://www.senado.gob.ar/parlamentario/comisiones/verExp/{exp_limpio}"
+        return ""
+
     def analizar_proyectos(self, filas_nuevas):
         if not self.client or not filas_nuevas:
-            return "Sin análisis disponible.", []
+            return "Sin proyectos relevantes para analizar hoy.", []
 
         lista_proy_texto = []
-        titulos_por_id = {} 
+        meta_data_por_id = {} 
 
         for fila in filas_nuevas:
             id_interno = fila[0]
+            origen = fila[1]
+            expediente = fila[2]
             titulo = fila[5]
-            titulos_por_id[id_interno] = titulo
+            
+            link = self.generar_link(origen, expediente)
+            
+            meta_data_por_id[id_interno] = {
+                "titulo": titulo,
+                "link": link
+            }
             
             item = {
                 "id_interno": id_interno, 
-                "expediente": fila[2],
+                "expediente": expediente,
                 "titulo": titulo
             }
             lista_proy_texto.append(str(item))
@@ -37,7 +53,7 @@ class AnalistaLegislativo:
         Analiza estos proyectos de ley y devuelve un objeto JSON con este formato exacto:
         
         {{
-            "resumen_general": "Un párrafo de 3 líneas resumiendo la tendencia del día (ej: 'Se presentaron normas sobre tarjetas de crédito y regulaciones laborales...').",
+            "resumen_general": "Un párrafo de 3 líneas resumiendo la tendencia del día.",
             "analisis_individual": [
                 {{
                     "id_interno": "PLxxx",
@@ -58,7 +74,6 @@ class AnalistaLegislativo:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
         """
 
-        # LISTA DE MODELOS DE RESPALDO (Si falla uno, prueba el otro)
         modelos_a_probar = [
             "gemini-2.5-flash",
             "gemini-2.0-flash-exp"
@@ -68,8 +83,6 @@ class AnalistaLegislativo:
         espera_base = 5
 
         for modelo in modelos_a_probar:
-            print(f"Probando modelo IA: {modelo}...")
-            
             for intento in range(intentos_maximos_por_modelo):
                 try:
                     response = self.client.models.generate_content(
@@ -80,7 +93,6 @@ class AnalistaLegislativo:
                         )
                     )
                     
-                    # Si llegamos aca, funcionó
                     data = json.loads(response.text)
                     detalles = data.get("analisis_individual", [])
                     resumen = data.get("resumen_general", "Sin resumen general.")
@@ -95,22 +107,24 @@ class AnalistaLegislativo:
                         mensaje_whatsapp += "🚨 *ALERTA: IMPACTO ALTO*\n"
                         for p in altos:
                             id_ref = p.get('id_interno')
-                            titulo_real = titulos_por_id.get(id_ref, "Proyecto")
-                            titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
+                            meta = meta_data_por_id.get(id_ref, {})
+                            titulo_real = meta.get("titulo", "Proyecto")
+                            link_web = meta.get("link", "")
                             expediente = p.get('expediente', '')
                             
-                            mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
+                            mensaje_whatsapp += f"• *[{expediente}]({link_web})*: {titulo_real}\n"
                             mensaje_whatsapp += f"  _👉 {p.get('justificacion')}_\n\n"
 
                     if medios:
                         mensaje_whatsapp += "⚠️ *Impacto Medio / Monitorear*\n"
                         for p in medios:
                             id_ref = p.get('id_interno')
-                            titulo_real = titulos_por_id.get(id_ref, "Proyecto")
-                            titulo_corto = (titulo_real[:80] + '...') if len(titulo_real) > 80 else titulo_real
+                            meta = meta_data_por_id.get(id_ref, {})
+                            titulo_real = meta.get("titulo", "Proyecto")
+                            link_web = meta.get("link", "")
                             expediente = p.get('expediente', '')
                             
-                            mensaje_whatsapp += f"• *{expediente}*: {titulo_corto}\n"
+                            mensaje_whatsapp += f"• *[{expediente}]({link_web})*: {titulo_real}\n"
                             mensaje_whatsapp += f"  _{p.get('justificacion')}_\n"
                         mensaje_whatsapp += "\n"
 
@@ -124,23 +138,15 @@ class AnalistaLegislativo:
 
                 except Exception as e:
                     error_str = str(e)
-                    
-                    # Si es error 404 (Modelo no encontrado), rompemos el loop de reintentos 
-                    # y pasamos al SIGUIENTE MODELO de la lista principal
                     if "404" in error_str or "NOT_FOUND" in error_str:
-                        print(f"Modelo {modelo} no encontrado (404). Pasando al siguiente...")
                         break 
                     
-                    # Si es error 429 (Cuota), esperamos y reintentamos EL MISMO modelo
                     if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                         if intento < intentos_maximos_por_modelo - 1:
                             tiempo_espera = espera_base * (intento + 1)
-                            print(f"Cuota excedida ({modelo}). Reintentando en {tiempo_espera}s...")
                             time.sleep(tiempo_espera)
                             continue
                     
-                    print(f"Error desconocido en Gemini ({modelo}): {e}")
-                    # Si es otro error, tambien probamos el siguiente modelo por las dudas
                     break 
         
-        return "Error: Ningún modelo de IA respondió correctamente.", []
+        return "Error IA: No se pudo generar el análisis.", []
