@@ -7,12 +7,9 @@ from notifications import MensajeSender
 from diputados import ScrapearDiputados
 from senadores import ScrapearSenado
 from analisis import AnalistaLegislativo
+from boletin import ScrapearBoletin
 
 def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
-    """
-    Carga datos en Sheet y devuelve estadísticas y filas para analizar.
-    NO genera texto de reporte, solo devuelve datos crudos.
-    """
     stats = {
         "origen": nombre_origen,
         "nuevos": 0,
@@ -22,7 +19,7 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
     }
     
     if df_nuevos is None or df_nuevos.empty:
-        stats["error"] = "Sin datos web"
+        stats["error"] = "Sin datos nuevos hoy"
         return stats, []
 
     todos_los_datos = hoja_sheet.get_all_values()
@@ -45,9 +42,10 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
                 'datos': fila
             }
         
-        if id_actual.startswith("PL"):
+        prefijo = "BO" if "Boletin" in nombre_origen else "PL"
+        if id_actual.startswith(prefijo):
             try:
-                num = int(id_actual.replace("PL", ""))
+                num = int(id_actual.replace(prefijo, ""))
                 ids_existentes_numeros.append(num)
             except: pass
 
@@ -67,57 +65,67 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
         hoja_sheet.add_rows(len(nuevos_reales))
     
     puntero_fila = cantidad_filas_ocupadas + 1
+    prefijo_id = "BO" if "Boletin" in nombre_origen else "PL"
 
     for index, row in df_nuevos.iterrows():
         exp_web = str(row['Expediente']).strip()
-        fecha_web = str(row['Fecha de inicio']).strip()
+        
+        autor = str(row['Autor'])
+        fecha = str(row['Fecha de inicio'])
+        proy = str(row['Proyecto'])
+        comis_link = str(row['Comisiones']) 
+
+        partido = str(row.get('Partido Político', ''))
+        provincia = str(row.get('Provincia', ''))
 
         if exp_web in mapa_expedientes:
             info = mapa_expedientes[exp_web]
             datos_viejos = info['datos']
-            fecha_sheet = str(datos_viejos[4]).strip() if len(datos_viejos) > 4 else ""
-            obs_actual = str(datos_viejos[11]).strip() if len(datos_viejos) > 11 else ""
+            
+            idx_obs = 9 if "Boletin" in nombre_origen else 11
+            obs_actual = str(datos_viejos[idx_obs]).strip() if len(datos_viejos) > idx_obs else ""
             
             if not obs_actual or "Error" in obs_actual:
                 stats["reanalizados"] += 1
+
                 fila_reconstruida = [
-                    datos_viejos[0], nombre_origen, row['Expediente'], row['Autor'],
-                    row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
-                    '','','','',''
+                    datos_viejos[0], nombre_origen, exp_web, autor,
+                    fecha, proy, comis_link,
+                    '','','','','' 
                 ]
                 fila_reconstruida.append(info['fila_excel'])
                 filas_para_analizar.append(fila_reconstruida)
-
-            if fecha_web != fecha_sheet:
-                id_orig = datos_viejos[0]
-                estado = datos_viejos[7] if len(datos_viejos) > 7 else ""
-                prob = datos_viejos[8] if len(datos_viejos) > 8 else ""
-                obs = datos_viejos[11] if len(datos_viejos) > 11 else ""
-
-                fila_update = [
-                    id_orig, nombre_origen, row['Expediente'], row['Autor'],
-                    row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
-                    estado, prob, row['Partido Político'], row['Provincia'], obs
-                ]
-                fila_update = [str(x) if pd.notna(x) else "" for x in fila_update]
-                
-                rango = f"A{info['fila_excel']}:L{info['fila_excel']}"
-                operaciones_batch.append({'range': rango, 'values': [fila_update]})
             else:
                 stats["omitidos"] += 1
         else:
-            id_str = f"PL{proximo_id:03d}"
-            fila_new = [
-                id_str, nombre_origen, row['Expediente'], row['Autor'],
-                row['Fecha de inicio'], row['Proyecto'], row['Comisiones'],
-                '', '', row['Partido Político'], row['Provincia'], ''
-            ]
+            id_str = f"{prefijo_id}{proximo_id:03d}"
+            
+            if "Boletin" in nombre_origen:
+
+                fila_new = [
+                    id_str, nombre_origen, exp_web, autor,
+                    fecha, proy, comis_link,
+                    '', '', '' 
+                ]
+            else:
+
+                fila_new = [
+                    id_str, nombre_origen, exp_web, autor,
+                    fecha, proy, comis_link,
+                    '', '', partido, provincia, ''
+                ]
+
             fila_new = [str(x) if pd.notna(x) else "" for x in fila_new]
             
-            rango = f"A{puntero_fila}:L{puntero_fila}"
+            letra_final = "J" if "Boletin" in nombre_origen else "L"
+            rango = f"A{puntero_fila}:{letra_final}{puntero_fila}"
+            
             operaciones_batch.append({'range': rango, 'values': [fila_new]})
             
             fila_meta = list(fila_new)
+            if "Boletin" in nombre_origen:
+                fila_meta.extend(['', '']) 
+            
             fila_meta.append(puntero_fila)
             filas_para_analizar.append(fila_meta)
             
