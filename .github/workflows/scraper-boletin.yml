@@ -26,4 +26,5 @@ jobs:
           pip install selenium pandas
 
       - name: Correr Test de Boletín
+
         run: python boletin.py
