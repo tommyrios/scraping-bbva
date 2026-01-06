@@ -72,8 +72,8 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
         
         autor = str(row['Autor'])
         fecha = str(row['Fecha de inicio'])
-        proy = str(row['Proyecto'])
-        comis_link = str(row['Comisiones']) 
+        sintesis_o_titulo = str(row['Proyecto'])
+        link = str(row['Comisiones']) 
 
         partido = str(row.get('Partido Político', ''))
         provincia = str(row.get('Provincia', ''))
@@ -82,50 +82,50 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
             info = mapa_expedientes[exp_web]
             datos_viejos = info['datos']
             
-            idx_obs = 9 if "Boletin" in nombre_origen else 11
+            idx_obs = 7 if "Boletin" in nombre_origen else 11
             obs_actual = str(datos_viejos[idx_obs]).strip() if len(datos_viejos) > idx_obs else ""
             
             if not obs_actual or "Error" in obs_actual:
                 stats["reanalizados"] += 1
                 
-                fila_reconstruida = [
+                fila_virtual = [
                     datos_viejos[0], nombre_origen, exp_web, autor,
-                    fecha, proy, comis_link,
+                    fecha, sintesis_o_titulo, link, 
                     '','','','','' 
                 ]
-                fila_reconstruida.append(info['fila_excel'])
-                filas_para_analizar.append(fila_reconstruida)
+                fila_virtual.append(info['fila_excel'])
+                filas_para_analizar.append(fila_virtual)
             else:
                 stats["omitidos"] += 1
         else:
             id_str = f"{prefijo_id}{proximo_id:03d}"
             
             if "Boletin" in nombre_origen:
-                fila_new = [
+                fila_sheet = [
                     id_str, nombre_origen, exp_web, autor,
-                    fecha, proy, comis_link,
-                    '', '', '' 
+                    fecha, link 
                 ]
-                letra_final = "J"
+                letra_final = "F"
             else:
-                fila_new = [
+                fila_sheet = [
                     id_str, nombre_origen, exp_web, autor,
-                    fecha, proy, comis_link,
+                    fecha, sintesis_o_titulo, link,
                     '', '', partido, provincia, ''
                 ]
                 letra_final = "L"
 
-            fila_new = [str(x) if pd.notna(x) else "" for x in fila_new]
+            fila_sheet = [str(x) if pd.notna(x) else "" for x in fila_sheet]
             
             rango = f"A{puntero_fila}:{letra_final}{puntero_fila}"
-            operaciones_batch.append({'range': rango, 'values': [fila_new]})
+            operaciones_batch.append({'range': rango, 'values': [fila_sheet]})
             
-            fila_meta = list(fila_new)
-            if "Boletin" in nombre_origen:
-                fila_meta.extend(['', '']) 
-            
-            fila_meta.append(puntero_fila)
-            filas_para_analizar.append(fila_meta)
+            fila_ia = [
+                id_str, nombre_origen, exp_web, autor,
+                fecha, sintesis_o_titulo, link,
+                '', '', '', '', ''
+            ]
+            fila_ia.append(puntero_fila)
+            filas_para_analizar.append(fila_ia)
             
             proximo_id += 1
             puntero_fila += 1
@@ -137,7 +137,7 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
     return stats, filas_para_analizar
 
 if __name__ == "__main__":
-    print("--- Iniciando Proceso Unificado (Congreso + Boletín) ---")
+    print("--- Iniciando Proceso Unificado ---")
     sender = MensajeSender()
     
     try:
@@ -156,101 +156,73 @@ if __name__ == "__main__":
         sheet_boletin = wb.worksheet("Boletin")
 
         todas_filas_para_ia = []
-        texto_estadisticas = "*📊 Reporte de Actividad Diaria*\n\n"
+        texto_estadisticas = "*📊 Reporte Diario*\n\n"
 
         print(">>> Procesando Diputados...")
         try:
             bot_dip = ScrapearDiputados()
             df_dip = bot_dip.scrape("https://www.diputados.gov.ar/proyectos/")
-            if df_dip is not None and not df_dip.empty:
-                df_dip = df_dip.iloc[::-1]
-            
-            stats_dip, filas_dip = procesar_datos(df_dip, sheet_proyectos, "Diputados")
-            todas_filas_para_ia.extend(filas_dip)
-            
-            if stats_dip['error']:
-                texto_estadisticas += f"🏛️ *Diputados:* ⚠️ {stats_dip['error']}\n"
-            else:
-                texto_estadisticas += f"🏛️ *Diputados:* ✅ {stats_dip['nuevos']} nuevos | ♻️ {stats_dip['reanalizados']}\n"
-        except Exception as e:
-            print(f"Error Diputados: {e}")
-            texto_estadisticas += f"🏛️ *Diputados:* ❌ Error ({str(e)})\n"
+            if df_dip is not None and not df_dip.empty: df_dip = df_dip.iloc[::-1]
+            stats, filas = procesar_datos(df_dip, sheet_proyectos, "Diputados")
+            todas_filas_para_ia.extend(filas)
+            texto_estadisticas += f"🏛️ *Diputados:* {stats['nuevos']} nuevos\n" if not stats['error'] else f"🏛️ *Diputados:* ⚠️ {stats['error']}\n"
+        except Exception as e: print(f"Err Dip: {e}")
 
         print(">>> Procesando Senado...")
         try:
             bot_sen = ScrapearSenado()
             df_sen = bot_sen.scrape()
-            if df_sen is not None and not df_sen.empty:
-                df_sen = df_sen.iloc[::-1]
-            
-            stats_sen, filas_sen = procesar_datos(df_sen, sheet_proyectos, "Senado")
-            todas_filas_para_ia.extend(filas_sen)
+            if df_sen is not None and not df_sen.empty: df_sen = df_sen.iloc[::-1]
+            stats, filas = procesar_datos(df_sen, sheet_proyectos, "Senado")
+            todas_filas_para_ia.extend(filas)
+            texto_estadisticas += f"🏛️ *Senado:* {stats['nuevos']} nuevos\n" if not stats['error'] else f"🏛️ *Senado:* ⚠️ {stats['error']}\n"
+        except Exception as e: print(f"Err Sen: {e}")
 
-            if stats_sen['error']:
-                texto_estadisticas += f"🏛️ *Senado:* ⚠️ {stats_sen['error']}\n"
-            else:
-                texto_estadisticas += f"🏛️ *Senado:* ✅ {stats_sen['nuevos']} nuevos | ♻️ {stats_sen['reanalizados']}\n"
-        except Exception as e:
-            print(f"Error Senado: {e}")
-            texto_estadisticas += f"🏛️ *Senado:* ❌ Error ({str(e)})\n"
-
-        print(">>> Procesando Boletín Oficial...")
+        print(">>> Procesando Boletín...")
         try:
             bot_bo = ScrapearBoletin()
             df_bo = bot_bo.scrape()
-            
-            stats_bo, filas_bo = procesar_datos(df_bo, sheet_boletin, "Boletin Oficial")
-            todas_filas_para_ia.extend(filas_bo)
-
-            if stats_bo['error']:
-                texto_estadisticas += f"📜 *Boletín Oficial:* ⚠️ {stats_bo['error']}\n"
-            else:
-                texto_estadisticas += f"📜 *Boletín Oficial:* ✅ {stats_bo['nuevos']} normas | ♻️ {stats_bo['reanalizados']}\n"
-        except Exception as e:
-            print(f"Error Boletin: {e}")
-            texto_estadisticas += f"📜 *Boletín Oficial:* ❌ Error ({str(e)})\n"
+            stats, filas = procesar_datos(df_bo, sheet_boletin, "Boletin Oficial")
+            todas_filas_para_ia.extend(filas)
+            texto_estadisticas += f"📜 *Boletín:* {stats['nuevos']} normas\n" if not stats['error'] else f"📜 *Boletín:* ⚠️ {stats['error']}\n"
+        except Exception as e: print(f"Err BO: {e}")
 
         texto_estadisticas += "\n----------------------------------------\n"
 
         print(">>> Analizando con IA...")
         analista = AnalistaLegislativo()
-        datos_para_ia = [f[:-1] for f in todas_filas_para_ia]
-        texto_analisis, detalles_ia = analista.analizar_proyectos(datos_para_ia)
+        datos_ia_clean = [f[:-1] for f in todas_filas_para_ia]
+        texto_analisis, detalles_ia = analista.analizar_proyectos(datos_ia_clean)
 
         if detalles_ia:
-            print(">>> Guardando análisis en Excel...")
+            print(">>> Guardando resultados...")
             mapa_id_fila = { f[0]: f[-1] for f in todas_filas_para_ia }
             
-            updates_proyectos = []
-            updates_boletin = []
+            upd_proy = []
+            upd_boletin = []
 
             for item in detalles_ia:
-                id_interno = item.get('id_interno')
-                impacto = item.get('impacto', '')
-                justificacion = item.get('justificacion', '')
+                id_int = item.get('id_interno')
+                imp = item.get('impacto', '')
+                just = item.get('justificacion', '')
                 
-                if id_interno in mapa_id_fila:
-                    num_fila = mapa_id_fila[id_interno]
-                    
-                    if id_interno.startswith("BO"):
-                        updates_boletin.append({'range': f"I{num_fila}", 'values': [[impacto]]})
-                        updates_boletin.append({'range': f"J{num_fila}", 'values': [[justificacion]]})
+                if id_int in mapa_id_fila:
+                    fila = mapa_id_fila[id_int]
+                    if id_int.startswith("BO"):
+                        upd_boletin.append({'range': f"G{fila}", 'values': [[imp]]})
+                        upd_boletin.append({'range': f"H{fila}", 'values': [[just]]})
                     else:
-                        updates_proyectos.append({'range': f"I{num_fila}", 'values': [[impacto]]})
-                        updates_proyectos.append({'range': f"L{num_fila}", 'values': [[justificacion]]})
+                        upd_proy.append({'range': f"I{fila}", 'values': [[imp]]})
+                        upd_proy.append({'range': f"L{fila}", 'values': [[just]]})
 
-            if updates_proyectos:
-                sheet_proyectos.batch_update(updates_proyectos, value_input_option='USER_ENTERED')
-            if updates_boletin:
-                sheet_boletin.batch_update(updates_boletin, value_input_option='USER_ENTERED')
+            if upd_proy: sheet_proyectos.batch_update(upd_proy, value_input_option='USER_ENTERED')
+            if upd_boletin: sheet_boletin.batch_update(upd_boletin, value_input_option='USER_ENTERED')
 
-        reporte_final = f"{texto_estadisticas}\n{texto_analisis}"
         print(">>> Enviando Email...")
-        sender.enviar_difusion(reporte_final)
-        print("✅ Proceso finalizado.")
+        sender.enviar_difusion(f"{texto_estadisticas}\n{texto_analisis}")
+        print("✅ Fin.")
 
     except Exception as e:
-        err_msg = f"❌ *Error Crítico General*: {str(e)}"
-        print(err_msg)
-        sender.enviar_difusion(err_msg)
+        print(f"❌ Error: {e}")
+        sender.enviar_difusion(f"Error Crítico: {e}")
         exit(1)
