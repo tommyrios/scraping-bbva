@@ -101,10 +101,10 @@ class AnalistaLegislativo:
                     if "Boletin" in origen:
                         texto += f"  🏛️ {origen} - {ref}\n"
                     else:
-                        texto += f"  🏛️ {origen}\n"
+                        texto += f"  🏛️ {origen} (Exp: {ref})\n"
                     
-                    texto += f"  Link: {link_web}\n"
                     texto += f"  👉 _{p.get('justificacion')}_\n"
+                    texto += f"  🔗 Link: {link_web}\n"
                     return texto
 
                 if niveles['ALTO']:

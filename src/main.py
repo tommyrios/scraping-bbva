@@ -30,10 +30,12 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
 
     for i, fila in enumerate(todos_los_datos):
         if i == 0: continue 
-        if len(fila) < 3: continue
+        if len(fila) < 2: continue
 
         id_actual = str(fila[0]).strip()
-        exp_actual = str(fila[2]).strip()
+        
+        idx_exp = 1 if "Boletin" in nombre_origen else 2
+        exp_actual = str(fila[idx_exp]).strip() if len(fila) > idx_exp else ""
         
         if exp_actual:
             mapa_expedientes[exp_actual] = {
@@ -82,7 +84,7 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
             info = mapa_expedientes[exp_web]
             datos_viejos = info['datos']
             
-            idx_obs = 7 if "Boletin" in nombre_origen else 11
+            idx_obs = 5 if "Boletin" in nombre_origen else 11
             obs_actual = str(datos_viejos[idx_obs]).strip() if len(datos_viejos) > idx_obs else ""
             
             if not obs_actual or "Error" in obs_actual:
@@ -102,10 +104,10 @@ def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
             
             if "Boletin" in nombre_origen:
                 fila_sheet = [
-                    id_str, nombre_origen, exp_web, autor,
-                    fecha, link 
+                    id_str, exp_web, autor, fecha, 
+                    '', '', link 
                 ]
-                letra_final = "F"
+                letra_final = "G"
             else:
                 fila_sheet = [
                     id_str, nombre_origen, exp_web, autor,
@@ -209,8 +211,8 @@ if __name__ == "__main__":
                 if id_int in mapa_id_fila:
                     fila = mapa_id_fila[id_int]
                     if id_int.startswith("BO"):
-                        upd_boletin.append({'range': f"G{fila}", 'values': [[imp]]})
-                        upd_boletin.append({'range': f"H{fila}", 'values': [[just]]})
+                        upd_boletin.append({'range': f"E{fila}", 'values': [[imp]]})
+                        upd_boletin.append({'range': f"F{fila}", 'values': [[just]]})
                     else:
                         upd_proy.append({'range': f"I{fila}", 'values': [[imp]]})
                         upd_proy.append({'range': f"L{fila}", 'values': [[just]]})
