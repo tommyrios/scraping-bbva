@@ -9,222 +9,240 @@ from senadores import ScrapearSenado
 from boletin import ScrapearBoletin
 from analisis import AnalistaLegislativo
 
-def procesar_datos(df_nuevos, hoja_sheet, nombre_origen):
-    stats = {
-        "origen": nombre_origen,
-        "nuevos": 0,
-        "reanalizados": 0,
-        "omitidos": 0,
-        "error": None
-    }
+class GestorEstado:
+    def __init__(self, sheet_obj, prefijo_id, columna_id=0):
+        self.sheet = sheet_obj
+        self.prefijo = prefijo_id
+        
+        raw_data = self.sheet.get_all_values()
+        self.fila_actual = len(raw_data) + 1
+        
+        ids_existentes = []
+        self.mapa_existentes = {} 
+        
+        idx_expediente = 1 if prefijo_id == "BO" else 2
+
+        for i, row in enumerate(raw_data):
+            if i == 0: continue # Header
+            if len(row) < 2: continue
+            
+            id_val = str(row[0]).strip()
+            exp_val = str(row[idx_expediente]).strip() if len(row) > idx_expediente else ""
+            
+            if exp_val:
+                self.mapa_existentes[exp_val] = {
+                    'fila': i + 1,
+                    'datos': row
+                }
+
+            if id_val.startswith(self.prefijo):
+                try:
+                    num = int(id_val.replace(self.prefijo, ""))
+                    ids_existentes.append(num)
+                except: pass
+        
+        self.proximo_id_num = (max(ids_existentes) + 1) if ids_existentes else 1
+
+    def obtener_datos_existentes(self, expediente):
+        return self.mapa_existentes.get(str(expediente).strip())
+
+    def registrar_nuevo(self):
+        id_str = f"{self.prefijo}{self.proximo_id_num:03d}"
+        fila = self.fila_actual
+        
+        self.proximo_id_num += 1
+        self.fila_actual += 1
+        
+        return id_str, fila
+
+def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_ia_globales):
+    stats = {"nuevos": 0, "reanalizados": 0, "omitidos": 0}
     
     if df_nuevos is None or df_nuevos.empty:
-        stats["error"] = "Sin datos nuevos hoy"
-        return stats, []
+        return stats
 
-    todos_los_datos = hoja_sheet.get_all_values()
-    cantidad_filas_ocupadas = len(todos_los_datos)
+    # Preparamos filas vacías en sheet si hay nuevos (optimización visual)
+    # pero el gestor ya maneja el puntero.
     
-    mapa_expedientes = {}
-    ids_existentes_numeros = []
+    nuevos_reales_count = 0
+    for _, row in df_nuevos.iterrows():
+        if not gestor.obtener_datos_existentes(row['Expediente']):
+            nuevos_reales_count += 1
+            
+    if nuevos_reales_count > 0:
+        gestor.sheet.add_rows(nuevos_reales_count)
 
-    for i, fila in enumerate(todos_los_datos):
-        if i == 0: continue 
-        if len(fila) < 2: continue
-
-        id_actual = str(fila[0]).strip()
-        
-        idx_exp = 1 if "Boletin" in nombre_origen else 2
-        exp_actual = str(fila[idx_exp]).strip() if len(fila) > idx_exp else ""
-        
-        if exp_actual:
-            mapa_expedientes[exp_actual] = {
-                'indice_lista': i, 
-                'fila_excel': i + 1,
-                'datos': fila
-            }
-        
-        prefijo = "BO" if "Boletin" in nombre_origen else "PL"
-        if id_actual.startswith(prefijo):
-            try:
-                num = int(id_actual.replace(prefijo, ""))
-                ids_existentes_numeros.append(num)
-            except: pass
-
-    proximo_id = 1
-    if ids_existentes_numeros:
-        proximo_id = max(ids_existentes_numeros) + 1
-
-    operaciones_batch = [] 
-    filas_para_analizar = [] 
-
-    nuevos_reales = []
-    for index, row in df_nuevos.iterrows():
-        if str(row['Expediente']).strip() not in mapa_expedientes:
-            nuevos_reales.append(row)
-    
-    if nuevos_reales:
-        hoja_sheet.add_rows(len(nuevos_reales))
-    
-    puntero_fila = cantidad_filas_ocupadas + 1
-    prefijo_id = "BO" if "Boletin" in nombre_origen else "PL"
-
-    for index, row in df_nuevos.iterrows():
+    for _, row in df_nuevos.iterrows():
         exp_web = str(row['Expediente']).strip()
-        
         autor = str(row['Autor'])
         fecha = str(row['Fecha de inicio'])
-        sintesis_o_titulo = str(row['Proyecto'])
-        link = str(row['Comisiones']) 
-
+        proyecto = str(row['Proyecto'])
+        link = str(row['Comisiones'])
+        
+        # Solo Congreso
         partido = str(row.get('Partido Político', ''))
         provincia = str(row.get('Provincia', ''))
 
-        if exp_web in mapa_expedientes:
-            info = mapa_expedientes[exp_web]
-            datos_viejos = info['datos']
+        info_existente = gestor.obtener_datos_existentes(exp_web)
+
+        if info_existente:
+            # --- YA EXISTE ---
+            datos_viejos = info_existente['datos']
+            fila_excel = info_existente['fila']
             
-            idx_obs = 5 if "Boletin" in nombre_origen else 11
+            # Indice Obs: Boletin=5, Proyectos=11
+            idx_obs = 5 if gestor.prefijo == "BO" else 11
             obs_actual = str(datos_viejos[idx_obs]).strip() if len(datos_viejos) > idx_obs else ""
-            
+
             if not obs_actual or "Error" in obs_actual:
                 stats["reanalizados"] += 1
-                
-                fila_virtual = [
+                # Fila virtual estandar para IA
+                fila_ia = [
                     datos_viejos[0], nombre_origen, exp_web, autor,
-                    fecha, sintesis_o_titulo, link, 
+                    fecha, proyecto, link, 
                     '','','','','' 
                 ]
-                fila_virtual.append(info['fila_excel'])
-                filas_para_analizar.append(fila_virtual)
+                fila_ia.append(fila_excel) # Guardamos num fila al final
+                filas_ia_globales.append(fila_ia)
             else:
                 stats["omitidos"] += 1
         else:
-            id_str = f"{prefijo_id}{proximo_id:03d}"
+            # --- NUEVO ---
+            id_nuevo, fila_excel = gestor.registrar_nuevo()
             
-            if "Boletin" in nombre_origen:
-                fila_sheet = [
-                    id_str, exp_web, autor, fecha, 
+            if gestor.prefijo == "BO":
+                # BOLETIN: A=ID, B=Norma, C=Org, D=Fecha, E=Imp, F=Obs, G=Link
+                # OJO: User pidió ID | Norma | Organismo | Fecha | Impacto | Observaciones | Link
+                # Eso significa Link va al final (Columna G, indice 6)
+                valores = [
+                    id_nuevo, exp_web, autor, fecha,
                     '', '', link 
                 ]
-                letra_final = "G"
+                rango = f"A{fila_excel}:G{fila_excel}"
             else:
-                fila_sheet = [
-                    id_str, nombre_origen, exp_web, autor,
-                    fecha, sintesis_o_titulo, link,
+                # CONGRESO (12 Cols)
+                valores = [
+                    id_nuevo, nombre_origen, exp_web, autor,
+                    fecha, proyecto, link,
                     '', '', partido, provincia, ''
                 ]
-                letra_final = "L"
+                rango = f"A{fila_excel}:L{fila_excel}"
 
-            fila_sheet = [str(x) if pd.notna(x) else "" for x in fila_sheet]
+            valores = [str(x) if pd.notna(x) else "" for x in valores]
             
-            rango = f"A{puntero_fila}:{letra_final}{puntero_fila}"
-            operaciones_batch.append({'range': rango, 'values': [fila_sheet]})
+            # Agregamos a la cola de escritura
+            operaciones_globales.append({'range': rango, 'values': [valores]})
             
+            # Agregamos a la cola de IA
             fila_ia = [
-                id_str, nombre_origen, exp_web, autor,
-                fecha, sintesis_o_titulo, link,
+                id_nuevo, nombre_origen, exp_web, autor,
+                fecha, proyecto, link,
                 '', '', '', '', ''
             ]
-            fila_ia.append(puntero_fila)
-            filas_para_analizar.append(fila_ia)
+            fila_ia.append(fila_excel)
+            filas_ia_globales.append(fila_ia)
             
-            proximo_id += 1
-            puntero_fila += 1
             stats["nuevos"] += 1
-
-    if operaciones_batch:
-        hoja_sheet.batch_update(operaciones_batch, value_input_option='USER_ENTERED')
-        
-    return stats, filas_para_analizar
+            
+    return stats
 
 if __name__ == "__main__":
-    print("--- Iniciando Proceso Unificado ---")
+    print("--- Sistema Unificado v2.0 (Stateful) ---")
     sender = MensajeSender()
     
     try:
-        if 'GCP_CREDENTIALS' in os.environ:
-            json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
-            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-            creds = Credentials.from_service_account_info(json_creds, scopes=scopes)
-            gc = gspread.authorize(creds)
-        else:
-            raise Exception("Falta GCP_CREDENTIALS")
-
-        URL_PLANILLA = "https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?gid=0#gid=0"
-        wb = gc.open_by_url(URL_PLANILLA)
+        # 1. Conexión
+        if 'GCP_CREDENTIALS' not in os.environ: raise Exception("Falta GCP_CREDENTIALS")
+        json_creds = json.loads(os.environ['GCP_CREDENTIALS'])
+        creds = Credentials.from_service_account_info(json_creds, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        gc = gspread.authorize(creds)
         
-        sheet_proyectos = wb.worksheet("Proyectos")
-        sheet_boletin = wb.worksheet("Boletin")
+        wb = gc.open_by_url("https://docs.google.com/spreadsheets/d/16aksCoBrIFB6Vy8JpiuVBEpfGNHdUNJcsCKb2k33tsQ/edit?gid=0#gid=0")
+        sheet_proy = wb.worksheet("Proyectos")
+        sheet_bo = wb.worksheet("Boletin")
 
-        todas_filas_para_ia = []
-        texto_estadisticas = "*📊 Reporte Diario*\n\n"
+        # 2. Inicializar Gestores de Estado (Leen la hoja UNA vez)
+        gestor_proy = GestorEstado(sheet_proy, "PL")
+        gestor_bo = GestorEstado(sheet_bo, "BO")
 
-        print(">>> Procesando Diputados...")
+        filas_ia_globales = []
+        batch_proy = []
+        batch_bo = []
+        
+        reporte = "*📊 Reporte Diario*\n\n"
+
+        # 3. Scraping
+        # --- DIPUTADOS ---
+        print(">>> Diputados...")
         try:
-            bot_dip = ScrapearDiputados()
-            df_dip = bot_dip.scrape("https://www.diputados.gov.ar/proyectos/")
-            if df_dip is not None and not df_dip.empty: df_dip = df_dip.iloc[::-1]
-            stats, filas = procesar_datos(df_dip, sheet_proyectos, "Diputados")
-            todas_filas_para_ia.extend(filas)
-            texto_estadisticas += f"🏛️ *Diputados:* {stats['nuevos']} nuevos\n" if not stats['error'] else f"🏛️ *Diputados:* ⚠️ {stats['error']}\n"
-        except Exception as e: print(f"Err Dip: {e}")
+            df = ScrapearDiputados().scrape("https://www.diputados.gov.ar/proyectos/")
+            if df is not None and not df.empty: df = df.iloc[::-1]
+            st = procesar_lote(df, gestor_proy, "Diputados", batch_proy, filas_ia_globales)
+            reporte += f"🏛️ *Diputados:* {st['nuevos']} nuevos\n"
+        except Exception as e: print(e); reporte += f"Diputados Error: {e}\n"
 
-        print(">>> Procesando Senado...")
+        # --- SENADO ---
+        print(">>> Senado...")
         try:
-            bot_sen = ScrapearSenado()
-            df_sen = bot_sen.scrape()
-            if df_sen is not None and not df_sen.empty: df_sen = df_sen.iloc[::-1]
-            stats, filas = procesar_datos(df_sen, sheet_proyectos, "Senado")
-            todas_filas_para_ia.extend(filas)
-            texto_estadisticas += f"🏛️ *Senado:* {stats['nuevos']} nuevos\n" if not stats['error'] else f"🏛️ *Senado:* ⚠️ {stats['error']}\n"
-        except Exception as e: print(f"Err Sen: {e}")
+            df = ScrapearSenado().scrape()
+            if df is not None and not df.empty: df = df.iloc[::-1]
+            st = procesar_lote(df, gestor_proy, "Senado", batch_proy, filas_ia_globales)
+            reporte += f"🏛️ *Senado:* {st['nuevos']} nuevos\n"
+        except Exception as e: print(e); reporte += f"Senado Error: {e}\n"
 
-        print(">>> Procesando Boletín...")
+        # --- BOLETIN ---
+        print(">>> Boletín...")
         try:
-            bot_bo = ScrapearBoletin()
-            df_bo = bot_bo.scrape()
-            stats, filas = procesar_datos(df_bo, sheet_boletin, "Boletin Oficial")
-            todas_filas_para_ia.extend(filas)
-            texto_estadisticas += f"📜 *Boletín:* {stats['nuevos']} normas\n" if not stats['error'] else f"📜 *Boletín:* ⚠️ {stats['error']}\n"
-        except Exception as e: print(f"Err BO: {e}")
+            df = ScrapearBoletin().scrape()
+            st = procesar_lote(df, gestor_bo, "Boletin Oficial", batch_bo, filas_ia_globales)
+            reporte += f"📜 *Boletín:* {st['nuevos']} normas\n"
+        except Exception as e: print(e); reporte += f"Boletín Error: {e}\n"
 
-        texto_estadisticas += "\n----------------------------------------\n"
+        # 4. Escritura Inicial (Datos crudos)
+        if batch_proy: sheet_proy.batch_update(batch_proy, value_input_option='USER_ENTERED')
+        if batch_bo: sheet_bo.batch_update(batch_bo, value_input_option='USER_ENTERED')
 
-        print(">>> Analizando con IA...")
+        reporte += "\n----------------------------------------\n"
+
+        # 5. Análisis IA
+        print(">>> Analizando IA...")
         analista = AnalistaLegislativo()
-        datos_ia_clean = [f[:-1] for f in todas_filas_para_ia]
-        texto_analisis, detalles_ia = analista.analizar_proyectos(datos_ia_clean)
+        datos_limpios = [f[:-1] for f in filas_ia_globales]
+        texto_analisis, resultados_ia = analista.analizar_proyectos(datos_limpios)
 
-        if detalles_ia:
-            print(">>> Guardando resultados...")
-            mapa_id_fila = { f[0]: f[-1] for f in todas_filas_para_ia }
+        # 6. Guardado IA
+        if resultados_ia:
+            print(">>> Guardando IA...")
+            updates_proy_ia = []
+            updates_bo_ia = []
             
-            upd_proy = []
-            upd_boletin = []
+            # Mapa rápido para encontrar fila por ID
+            mapa_filas = {f[0]: f[-1] for f in filas_ia_globales}
 
-            for item in detalles_ia:
-                id_int = item.get('id_interno')
+            for item in resultados_ia:
+                id_ref = item.get('id_interno')
                 imp = item.get('impacto', '')
                 just = item.get('justificacion', '')
                 
-                if id_int in mapa_id_fila:
-                    fila = mapa_id_fila[id_int]
-                    if id_int.startswith("BO"):
-                        upd_boletin.append({'range': f"E{fila}", 'values': [[imp]]})
-                        upd_boletin.append({'range': f"F{fila}", 'values': [[just]]})
+                if id_ref in mapa_filas:
+                    fila = mapa_filas[id_ref]
+                    if id_ref.startswith("BO"):
+                        # Boletin: Impacto en E (Col 5), Obs en F (Col 6)
+                        updates_bo_ia.append({'range': f"E{fila}", 'values': [[imp]]})
+                        updates_bo_ia.append({'range': f"F{fila}", 'values': [[just]]})
                     else:
-                        upd_proy.append({'range': f"I{fila}", 'values': [[imp]]})
-                        upd_proy.append({'range': f"L{fila}", 'values': [[just]]})
+                        # Proyectos: Impacto en I (Col 9), Obs en L (Col 12)
+                        updates_proy_ia.append({'range': f"I{fila}", 'values': [[imp]]})
+                        updates_proy_ia.append({'range': f"L{fila}", 'values': [[just]]})
 
-            if upd_proy: sheet_proyectos.batch_update(upd_proy, value_input_option='USER_ENTERED')
-            if upd_boletin: sheet_boletin.batch_update(upd_boletin, value_input_option='USER_ENTERED')
+            if updates_proy_ia: sheet_proy.batch_update(updates_proy_ia, value_input_option='USER_ENTERED')
+            if updates_bo_ia: sheet_bo.batch_update(updates_bo_ia, value_input_option='USER_ENTERED')
 
-        print(">>> Enviando Email...")
-        sender.enviar_difusion(f"{texto_estadisticas}\n{texto_analisis}")
-        print("✅ Fin.")
+        print(">>> Enviando mail...")
+        sender.enviar_difusion(f"{reporte}\n{texto_analisis}")
+        print("✅ Éxito total.")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ FATAL: {e}")
         sender.enviar_difusion(f"Error Crítico: {e}")
         exit(1)

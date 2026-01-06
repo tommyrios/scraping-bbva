@@ -30,6 +30,8 @@ class AnalistaLegislativo:
             expediente = fila[2]
             titulo = fila[5]
             
+            # Recuperamos el Link. 
+            # En Boletin viene en columna 6. En Proyectos lo generamos.
             if "Boletin" in origen:
                 link = fila[6]
             else:
@@ -48,22 +50,22 @@ class AnalistaLegislativo:
         prompt = f"""
         Analiza estos proyectos legislativos y normas del Boletín Oficial para Banco BBVA.
         
-        Devuelve un JSON exacto:
+        Devuelve un JSON exacto con este esquema:
         {{
-            "resumen_general": "Párrafo de 4-5 líneas. DEBES comenzar mencionando las normas aprobadas en el Boletín Oficial si las hay, y luego resumir la tendencia legislativa del Congreso.",
+            "resumen_general": "Párrafo de 4-5 líneas. Empieza por el Boletín Oficial si hay normas, luego el Congreso.",
             "analisis_individual": [
                 {{
-                    "id_interno": "ID",
-                    "referencia": "Expediente o Norma",
+                    "id_interno": "ID_DEL_ITEM",
+                    "referencia": "Numero de Exp o Norma",
                     "impacto": "ALTO", 
-                    "justificacion": "Explicación directa para ejecutivos."
+                    "justificacion": "Explicación clara del riesgo u oportunidad."
                 }}
             ]
         }}
 
         Criterios:
-        - ALTO: Normas vigentes (Boletín) siempre son prioritarias. Leyes de bancos, impuestos, datos, laboral.
-        - MEDIO: Impacto indirecto.
+        - ALTO: Normas vigentes (Boletín). Leyes financieras, impositivas, datos, laboral.
+        - MEDIO: Impacto económico indirecto.
         - BAJO: Temas irrelevantes.
 
         Datos:
@@ -93,18 +95,12 @@ class AnalistaLegislativo:
                     meta = meta_data_por_id.get(id_ref, {})
                     titulo_real = meta.get("titulo", "Sin título")
                     link_web = meta.get("link", "")
-                    origen = meta.get("origen", "")
                     ref = p.get('referencia', '')
                     
-                    texto = f"• *{titulo_real}*\n"
-                    
-                    if "Boletin" in origen:
-                        texto += f"  🏛️ {origen} - {ref}\n"
-                    else:
-                        texto += f"  🏛️ {origen} (Exp: {ref})\n"
-                    
-                    texto += f"  👉 _{p.get('justificacion')}_\n"
-                    texto += f"  🔗 Link: {link_web}\n"
+                    # FORMATO SOLICITADO EXACTO
+                    texto = f"• *[{ref}]:* {titulo_real}\n"
+                    texto += f"{p.get('justificacion')}\n"
+                    texto += f"Link: {link_web}\n"
                     return texto
 
                 if niveles['ALTO']:
