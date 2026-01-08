@@ -49,7 +49,7 @@ class MensajeSender:
         lista_emails = [e.strip() for e in self.email_destinatarios_str.split(',')]
 
         msg = MIMEMultipart()
-        msg["From"] = f"Bot Legislativo <{self.email_user}>"
+        msg["From"] = f"Tracker Regulatorio <{self.email_user}>"
         msg["To"] = self.email_destinatarios_str 
         msg["Subject"] = f"Reporte Regulatorio {datetime.now().strftime('%d/%m/%Y')}"
 
