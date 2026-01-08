@@ -82,7 +82,7 @@ class AnalistaLegislativo:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
         """
 
-        modelos = ["gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash"]
+        modelos = ["gemini-3.0-pro", "gemini-3.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
         for modelo in modelos:
             try:
                 response = self.client.models.generate_content(
@@ -147,7 +147,16 @@ class AnalistaLegislativo:
                 return mensaje_final, todos_los_detalles_para_excel
 
             except Exception as e:
-                print(f"Intento fallido con {modelo}: {e}")
-                continue
+                    errores_saturacion = ["503", "overloaded", "429", "quota"]
+                    es_saturacion = any(err in str(e) for err in errores_saturacion)
+                    
+                    if es_saturacion:
+                        tiempo_espera = 5 * (intento + 1) 
+                        print(f"⚠️ Modelo {modelo} saturado. Reintentando en {tiempo_espera}s... ({intento+1}/3)")
+                        time.sleep(tiempo_espera)
+                        continue 
+                    else:
+                        print(f"❌ Error no recuperable con {modelo}: {e}")
+                        break
         
         return "Error en análisis IA", []
