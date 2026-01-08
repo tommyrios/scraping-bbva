@@ -217,7 +217,6 @@ class ScrapearSenado:
             return pd.DataFrame()
 
         for i, item in enumerate(items_unicos): 
-            print(f"[{i+1}/{len(items_unicos)}] {item['id']}...")
             info = self.extraer_detalle_proyecto(item['url'])
             
             if info:

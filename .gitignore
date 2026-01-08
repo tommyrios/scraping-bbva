@@ -1,0 +1,27 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Entornos Virtuales (Importante para no subir miles de archivos) ---
+venv/
+.venv/
+env/
+
+# --- Variables de Entorno (Seguridad) ---
+.env
+.env.local
+
+# --- Selenium / Drivers ---
+*.log
+chromedriver
+geckodriver
+driver/
+
+# --- Sistema Operativo ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs (VS Code, Pycharm) ---
+.vscode/
+.idea/
