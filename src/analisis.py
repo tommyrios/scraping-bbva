@@ -30,8 +30,6 @@ class AnalistaLegislativo:
             expediente = fila[2]
             titulo = fila[5]
             
-            # Recuperamos el Link. 
-            # En Boletin viene en columna 6. En Proyectos lo generamos.
             if "Boletin" in origen:
                 link = fila[6]
             else:
@@ -48,31 +46,35 @@ class AnalistaLegislativo:
             lista_proy_texto.append(str(item))
 
         prompt = f"""
-        Analiza estos proyectos legislativos y normas del Boletín Oficial para Banco BBVA.
-        
-        Devuelve un JSON exacto con este esquema:
+        Eres un analista de riesgos para Banco BBVA.
+        Clasifica y analiza los siguientes items en 3 categorías: Boletín Oficial, Cámara de Diputados y Senado.
+
+        Devuelve un JSON con esta estructura exacta:
         {{
-            "resumen_general": "Párrafo de 4-5 líneas. Empieza por el Boletín Oficial si hay normas, luego el Congreso.",
-            "analisis_individual": [
-                {{
-                    "id_interno": "ID_DEL_ITEM",
-                    "referencia": "Numero de Exp o Norma",
-                    "impacto": "ALTO", 
-                    "justificacion": "Explicación clara del riesgo u oportunidad."
-                }}
-            ]
+            "boletin": {{
+                "resumen": "Resumen ejecutivo de 3 líneas sobre las normas publicadas hoy.",
+                "items": [ {{ "id_interno": "...", "referencia": "...", "impacto": "...", "justificacion": "..." }} ]
+            }},
+            "diputados": {{
+                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Diputados.",
+                "items": []
+            }},
+            "senado": {{
+                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Senado.",
+                "items": []
+            }}
         }}
 
-        Criterios:
-        - ALTO: Normas vigentes (Boletín). Leyes financieras, impositivas, datos, laboral.
-        - MEDIO: Impacto económico indirecto.
-        - BAJO: Temas irrelevantes.
+        CRITERIOS DE IMPACTO:
+        - ALTO: Normas vigentes/nombramiento de funcionarios (Boletín) o Proyectos con alto riesgo regulatorio/financiero/impositivo (Cámaras Legislativas).
+        - MEDIO: Impacto indirecto o sectorial (Boletín y Cámaras Legislativas).
+        - BAJO: Temas de interés general o irrelevantes (Boletín y Cámaras Legislativas).
 
-        Datos:
+        Datos a analizar:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
         """
 
-        modelos = ["gemini-1.5-flash", "gemini-2.0-flash-exp"]
+        modelos = ["gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash"]
         for modelo in modelos:
             try:
                 response = self.client.models.generate_content(
@@ -80,15 +82,15 @@ class AnalistaLegislativo:
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
                 data = json.loads(response.text)
-                detalles = data.get("analisis_individual", [])
-                resumen = data.get("resumen_general", "")
-
-                msg = f"📢 *Resumen Ejecutivo:*\n{resumen}\n\n"
                 
-                niveles = {'ALTO': [], 'MEDIO': [], 'BAJO': []}
-                for d in detalles:
-                    imp = d.get('impacto', 'BAJO')
-                    if imp in niveles: niveles[imp].append(d)
+                mensaje_final = ""
+                todos_los_detalles_para_excel = []
+
+                secciones = [
+                    ("Reporte Boletín Oficial", "boletin"),
+                    ("Reporte Diputados", "diputados"),
+                    ("Reporte Senado", "senado")
+                ]
 
                 def formatear_item(p):
                     id_ref = p.get('id_interno')
@@ -97,29 +99,46 @@ class AnalistaLegislativo:
                     link_web = meta.get("link", "")
                     ref = p.get('referencia', '')
                     
-                    # FORMATO SOLICITADO EXACTO
                     texto = f"• *[{ref}]:* {titulo_real}\n"
                     texto += f"{p.get('justificacion')}\n"
                     texto += f"Link: {link_web}\n"
                     return texto
 
-                if niveles['ALTO']:
-                    msg += "🚨 *ALERTA: IMPACTO ALTO*\n"
-                    for p in niveles['ALTO']:
-                        msg += formatear_item(p) + "\n"
+                for titulo_seccion, key_json in secciones:
+                    bloque = data.get(key_json, {})
+                    items = bloque.get("items", [])
+                    resumen = bloque.get("resumen", "Sin movimientos.")
+                    
+                    todos_los_detalles_para_excel.extend(items)
 
-                if niveles['MEDIO']:
-                    msg += "⚠️ *Impacto Medio / Monitorear*\n"
-                    for p in niveles['MEDIO']:
-                        msg += formatear_item(p) + "\n"
-                
-                bajos = len(niveles['BAJO'])
-                if bajos > 0:
-                    msg += f"📉 *Normas/Proyectos de Impacto Bajo:* {bajos}\n"
+                    if not items and "Sin movimientos" in resumen:
+                        continue
 
-                return msg, detalles
+                    mensaje_final += f"📢 *{titulo_seccion}*\n"
+                    mensaje_final += f"_{resumen}_\n\n"
 
-            except Exception:
+                    altos = [x for x in items if x.get('impacto') == 'ALTO']
+                    medios = [x for x in items if x.get('impacto') == 'MEDIO']
+                    
+                    if altos:
+                        mensaje_final += "🚨 *Impacto ALTO*\n"
+                        for p in altos:
+                            mensaje_final += formatear_item(p) + "\n"
+                    
+                    if medios:
+                        mensaje_final += "⚠️ *Impacto MEDIO*\n"
+                        for p in medios:
+                            mensaje_final += formatear_item(p) + "\n"
+                    
+                    mensaje_final += "----------------------------------------\n\n"
+
+                if not mensaje_final:
+                    mensaje_final = "✅ *Sin novedades legislativas ni normativas relevantes hoy.*"
+
+                return mensaje_final, todos_los_detalles_para_excel
+
+            except Exception as e:
+                print(f"Intento fallido con {modelo}: {e}")
                 continue
         
         return "Error en análisis IA", []
