@@ -51,7 +51,7 @@ class MensajeSender:
         msg = MIMEMultipart()
         msg["From"] = f"Bot Legislativo <{self.email_user}>"
         msg["To"] = self.email_destinatarios_str 
-        msg["Subject"] = f"📜 Reporte Regulatorio Diario {datetime.now().strftime('%d/%m/%Y')}"
+        msg["Subject"] = f"Reporte Regulatorio {datetime.now().strftime('%d/%m/%Y')}"
 
         cuerpo_html = self.formatear_mensaje_a_html(mensaje)
         msg.attach(MIMEText(cuerpo_html, "html"))

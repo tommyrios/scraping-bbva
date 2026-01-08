@@ -52,22 +52,30 @@ class AnalistaLegislativo:
         Devuelve un JSON con esta estructura exacta:
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas sobre las normas publicadas hoy.",
-                "items": [ {{ "id_interno": "...", "referencia": "...", "impacto": "...", "justificacion": "..." }} ]
+                "resumen": "Resumen ejecutivo de 3 líneas sobre las normas publicadas hoy (sin formato markdown cursiva).",
+                "items": [ 
+                    {{ 
+                        "id_interno": "...", 
+                        "referencia": "...", 
+                        "titulo_descriptivo": "Titular periodístico breve y limpio. ELIMINA códigos técnicos como 'DECTO-2024-APN'.",
+                        "impacto": "...", 
+                        "justificacion": "..." 
+                    }} 
+                ]
             }},
             "diputados": {{
-                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Diputados.",
+                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Diputados (sin formato markdown cursiva).",
                 "items": []
             }},
             "senado": {{
-                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Senado.",
+                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Senado (sin formato markdown cursiva).",
                 "items": []
             }}
         }}
 
         CRITERIOS DE IMPACTO:
-        - ALTO: Normas vigentes/nombramiento de funcionarios (Boletín) o Proyectos con alto riesgo regulatorio/financiero/impositivo (Cámaras Legislativas).
-        - MEDIO: Impacto indirecto o sectorial (Boletín y Cámaras Legislativas).
+        - ALTO: Normas vigentes (Boletín) o Proyectos con alto riesgo regulatorio/financiero/impositivo (Cámaras Legislativas).
+        - MEDIO: Nombramiento de funcionarios (Boletín), Impacto indirecto o sectorial (Boletín y Cámaras Legislativas).
         - BAJO: Temas de interés general o irrelevantes (Boletín y Cámaras Legislativas).
 
         Datos a analizar:
@@ -95,11 +103,12 @@ class AnalistaLegislativo:
                 def formatear_item(p):
                     id_ref = p.get('id_interno')
                     meta = meta_data_por_id.get(id_ref, {})
-                    titulo_real = meta.get("titulo", "Sin título")
+                    
+                    titulo_mostrar = p.get("titulo_descriptivo", meta.get("titulo", "Sin título"))
                     link_web = meta.get("link", "")
                     ref = p.get('referencia', '')
                     
-                    texto = f"• *[{ref}]:* {titulo_real}\n"
+                    texto = f"• *[{ref}]:* {titulo_mostrar}\n"
                     texto += f"{p.get('justificacion')}\n"
                     texto += f"Link: {link_web}\n"
                     return texto
@@ -115,7 +124,7 @@ class AnalistaLegislativo:
                         continue
 
                     mensaje_final += f"📢 *{titulo_seccion}*\n"
-                    mensaje_final += f"_{resumen}_\n\n"
+                    mensaje_final += f"{resumen}\n\n"
 
                     altos = [x for x in items if x.get('impacto') == 'ALTO']
                     medios = [x for x in items if x.get('impacto') == 'MEDIO']
