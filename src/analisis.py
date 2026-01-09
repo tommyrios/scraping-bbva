@@ -101,6 +101,9 @@ class AnalistaLegislativo:
         for modelo in modelos:
             for intento in range(3): 
                 try:
+
+                    print(f"Usando modelo {modelo}")
+                    
                     response = self.client.models.generate_content(
                         model=modelo, contents=prompt,
                         config=types.GenerateContentConfig(response_mime_type="application/json")
