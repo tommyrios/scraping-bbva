@@ -21,29 +21,34 @@ class AnalistaLegislativo:
 
     def traer_texto_boletin(self, url):
         """
-        Entra a la URL del Boletín Oficial y extrae el texto de la norma
-        para que la IA pueda encontrar los nombres de los funcionarios.
+        Entra a la URL del Boletín Oficial y extrae el texto real de la norma
+        para que la IA pueda encontrar los nombres propios.
         """
-        if not url or "boletinoficial.gob.ar" not in url:
+        if not url or "boletinoficial" not in url:
             return ""
         
         try:
+            # Headers para simular un navegador y evitar bloqueos
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
-            response = requests.get(url, headers=headers, timeout=10)
+            # Timeout corto para no demorar todo el proceso
+            response = requests.get(url, headers=headers, timeout=5)
             
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
-
+                
+                # El texto suele estar en un div con id 'avisodetalle'
                 contenido = soup.find('div', {'id': 'avisodetalle'})
+                
+                # Fallback si cambia el diseño
                 if not contenido:
                     contenido = soup.find('div', class_='detalle-aviso')
                 
                 if contenido:
-                    texto_limpio = contenido.get_text(separator=' ', strip=True)
-
-                    return texto_limpio[:8000] 
+                    # Limpiamos y cortamos el texto (8000 caracteres es suficiente para la parte resolutiva)
+                    texto = contenido.get_text(separator=' ', strip=True)
+                    return texto[:8000]
             
             return ""
         except Exception as e:
@@ -57,7 +62,7 @@ class AnalistaLegislativo:
         lista_proy_texto = []
         meta_data_por_id = {} 
 
-        print(f">>> Recopilando texto completo de {len(filas_nuevas)} items (esto puede tardar unos segundos)...")
+        print(f">>> Leyendo contenido detallado de {len(filas_nuevas)} normas (Web Scraping)...")
 
         for fila in filas_nuevas:
             id_interno = fila[0]
@@ -69,50 +74,47 @@ class AnalistaLegislativo:
             
             if "Boletin" in origen:
                 link = fila[6]
-                # AQUÍ ESTÁ LA MAGIA: Traemos el texto real
+                # [cite_start]AQUÍ ESTÁ LA CLAVE: Traemos el texto real de la web [cite: 1]
                 texto_extra = self.traer_texto_boletin(link)
             else:
                 link = self.generar_link(origen, expediente)
             
             meta_data_por_id[id_interno] = {"titulo": titulo, "link": link, "origen": origen}
             
-            # Combinamos el título corto con el texto completo extraído
-            descripcion_completa = titulo
+            # Preparamos la descripción para la IA: Título + Contenido Real
+            descripcion_full = titulo
             if texto_extra:
-                descripcion_completa += f" || CONTENIDO DETALLADO: {texto_extra}"
+                descripcion_full += f"\n\n--- TEXTO COMPLETO DE LA NORMA ---\n{texto_extra}"
 
             item = {
                 "id_interno": id_interno, 
                 "referencia": expediente,
-                "descripcion": descripcion_completa, # Enviamos TODO a la IA
+                "descripcion": descripcion_full, # Le pasamos todo
                 "fuente": origen
             }
             lista_proy_texto.append(str(item))
 
         prompt = f"""
         Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
-        Analiza los siguientes items del Boletín Oficial y Congreso.
-        
-        IMPORTANTE: Se te ha provisto el "CONTENIDO DETALLADO" de las normas. ÚSALO para encontrar nombres propios.
+        Analiza los siguientes items. Se te ha provisto el TEXTO COMPLETO de las normas. ÚSALO.
 
-        TU OBJETIVO: Precisión absoluta.
+        TU OBJETIVO: Precisión absoluta con nombres y datos.
 
-        Instrucciones para la redacción de campos:
+        Instrucciones para redacción:
         1. "titulo_descriptivo":
-           - Titular periodístico breve.
-           - Si es DESIGNACIÓN: "Designación de [NOMBRE Y APELLIDO ENCONTRADO EN EL TEXTO] en [ORGANISMO]".
-           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL]".
-           - Elimina códigos burocráticos.
+           - Titular periodístico.
+           - DESIGNACIONES: "Designación de [NOMBRE APELLIDO] en [ORGANISMO]". Busca el nombre en el texto provisto.
+           - NORMATIVAS: "Cambios en [TEMA] (ej: Tarifas, Impuestos)".
 
         2. "justificacion" (Observación Técnica):
            - ESTILO: Descriptivo y preciso.
-           - PARA DESIGNACIONES: Busca en el texto provisto el nombre de la persona designada. Ejemplo: "El decreto designa a Fernando Iglesias...".
-           - PARA NORMATIVAS: Detalla montos, tasas y plazos extraídos del texto.
+           - DESIGNACIONES: "Designa a [NOMBRE COMPLETO] como [CARGO]. Reemplaza a [ANTERIOR] (si figura)."
+           - NORMATIVAS: Detalla montos, tasas y plazos extraídos del texto.
 
         Devuelve un JSON con esta estructura exacta:
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona explícitamente los APELLIDOS de los funcionarios designados que encuentres en el texto.",
+                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona APELLIDOS de los funcionarios designados.",
                 "items": [ 
                     {{ 
                         "id_interno": "...", 
@@ -123,19 +125,13 @@ class AnalistaLegislativo:
                     }} 
                 ]
             }},
-            "diputados": {{
-                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
-                "items": []
-            }},
-            "senado": {{
-                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
-                "items": []
-            }}
+            "diputados": {{ "resumen": "...", "items": [] }},
+            "senado": {{ "resumen": "...", "items": [] }}
         }}
 
         CRITERIOS DE IMPACTO:
         - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral).
-        - MEDIO: Designaciones de funcionarios y normas sectoriales específicas.
+        - MEDIO: Designaciones de funcionarios y normas sectoriales.
         - BAJO: Temas de interés general.
 
         Datos a analizar:
