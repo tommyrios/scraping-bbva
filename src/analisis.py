@@ -46,108 +46,124 @@ class AnalistaLegislativo:
             lista_proy_texto.append(str(item))
 
         prompt = f"""
-        Eres un analista de riesgos para Banco BBVA.
-        Clasifica y analiza los siguientes items en 3 categorías: Boletín Oficial, Cámara de Diputados y Senado.
+        Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
+        Analiza los siguientes items del Boletín Oficial y Congreso.
+
+        TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
+
+        Instrucciones para la redacción de campos:
+        1. "titulo_descriptivo":
+           - Titular periodístico breve.
+           - Si es DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]".
+           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL] (ej: Tarifas, Impuestos)".
+           - Elimina códigos burocráticos (ej: 'RESOL-2026...').
+
+        2. "justificacion" (El análisis):
+           - ESTILO: Sintético pero rico en datos (2 líneas máximo).
+           - PARA DESIGNACIONES: DEBES mencionar explícitamente el NOMBRE COMPLETO y el CARGO EXACTO. (Ej: "Designa a Luis Fontana como titular de ANMAT en reemplazo de Nélida Bisio").
+           - PARA NORMATIVAS: Explica QUÉ se establece (montos, plazos, tasas, leyes que se modifican). NO digas "tiene impacto sectorial", di POR QUÉ (ej: "Fija precio de energía en 28 USD/MWh" o "Modifica alícuota de impuesto PAIS").
 
         Devuelve un JSON con esta estructura exacta:
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas sobre las normas publicadas hoy (sin formato markdown cursiva).",
+                "resumen": "Resumen ejecutivo de 3 líneas con lo más destacado del día.",
                 "items": [ 
                     {{ 
                         "id_interno": "...", 
                         "referencia": "...", 
-                        "titulo_descriptivo": "Titular periodístico breve y limpio. ELIMINA códigos técnicos como 'DECTO-2024-APN'.",
+                        "titulo_descriptivo": "...",
                         "impacto": "...", 
                         "justificacion": "..." 
                     }} 
                 ]
             }},
             "diputados": {{
-                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Diputados (sin formato markdown cursiva).",
+                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
                 "items": []
             }},
             "senado": {{
-                "resumen": "Resumen ejecutivo de 3 líneas sobre la actividad en Senado (sin formato markdown cursiva).",
+                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
                 "items": []
             }}
         }}
 
         CRITERIOS DE IMPACTO:
-        - ALTO: Normas vigentes (Boletín) o Proyectos con alto riesgo regulatorio/financiero/impositivo (Cámaras Legislativas).
-        - MEDIO: Nombramiento de funcionarios (Boletín), Impacto indirecto o sectorial (Boletín y Cámaras Legislativas).
-        - BAJO: Temas de interés general o irrelevantes (Boletín y Cámaras Legislativas).
+        - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral).
+        - MEDIO: Designaciones de funcionarios (Secretarios, Directores, Embajadores) y normas sectoriales específicas.
+        - BAJO: Temas de interés general, declaraciones de interés o efemérides.
 
         Datos a analizar:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
         """
 
         modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+        
         for modelo in modelos:
-            try:
-                response = self.client.models.generate_content(
-                    model=modelo, contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                data = json.loads(response.text)
-                
-                mensaje_final = ""
-                todos_los_detalles_para_excel = []
-
-                secciones = [
-                    ("Reporte Boletín Oficial", "boletin"),
-                    ("Reporte Diputados", "diputados"),
-                    ("Reporte Senado", "senado")
-                ]
-
-                def formatear_item(p):
-                    id_ref = p.get('id_interno')
-                    meta = meta_data_por_id.get(id_ref, {})
+            for intento in range(3): 
+                try:
+                    response = self.client.models.generate_content(
+                        model=modelo, contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    data = json.loads(response.text)
                     
-                    titulo_mostrar = p.get("titulo_descriptivo", meta.get("titulo", "Sin título"))
-                    link_web = meta.get("link", "")
-                    ref = p.get('referencia', '')
-                    
-                    texto = f"• *[{ref}]:* {titulo_mostrar}\n"
-                    texto += f"{p.get('justificacion')}\n"
-                    texto += f"Link: {link_web}\n"
-                    return texto
+                    mensaje_final = ""
+                    todos_los_detalles_para_excel = []
 
-                for titulo_seccion, key_json in secciones:
-                    bloque = data.get(key_json, {})
-                    items = bloque.get("items", [])
-                    resumen = bloque.get("resumen", "Sin movimientos.")
-                    
-                    todos_los_detalles_para_excel.extend(items)
+                    secciones = [
+                        ("Reporte Boletín Oficial", "boletin"),
+                        ("Reporte Diputados", "diputados"),
+                        ("Reporte Senado", "senado")
+                    ]
 
-                    if not items and "Sin movimientos" in resumen:
-                        continue
+                    def formatear_item(p):
+                        id_ref = p.get('id_interno')
+                        meta = meta_data_por_id.get(id_ref, {})
+                        
+                        titulo_mostrar = p.get("titulo_descriptivo", meta.get("titulo", "Sin título"))
+                        link_web = meta.get("link", "")
+                        ref = p.get('referencia', '')
+                        
+                        texto = f"• *[{ref}]:* {titulo_mostrar}\n"
+                        texto += f"{p.get('justificacion')}\n"
+                        texto += f"Link: {link_web}\n"
+                        return texto
 
-                    mensaje_final += f"📢 *{titulo_seccion}*\n"
-                    mensaje_final += f"{resumen}\n\n"
+                    for titulo_seccion, key_json in secciones:
+                        bloque = data.get(key_json, {})
+                        items = bloque.get("items", [])
+                        resumen = bloque.get("resumen", "Sin movimientos.")
+                        
+                        todos_los_detalles_para_excel.extend(items)
 
-                    altos = [x for x in items if x.get('impacto') == 'ALTO']
-                    medios = [x for x in items if x.get('impacto') == 'MEDIO']
-                    
-                    if altos:
-                        mensaje_final += "🚨 *Impacto ALTO*\n"
-                        for p in altos:
-                            mensaje_final += formatear_item(p) + "\n"
-                    
-                    if medios:
-                        mensaje_final += "⚠️ *Impacto MEDIO*\n"
-                        for p in medios:
-                            mensaje_final += formatear_item(p) + "\n"
-                    
-                    mensaje_final += "----------------------------------------\n\n"
+                        if not items and "Sin movimientos" in resumen:
+                            continue
 
-                if not mensaje_final:
-                    mensaje_final = "✅ *Sin novedades legislativas ni normativas relevantes hoy.*"
+                        mensaje_final += f"📢 *{titulo_seccion}*\n"
+                        mensaje_final += f"{resumen}\n\n"
 
-                return mensaje_final, todos_los_detalles_para_excel
+                        altos = [x for x in items if x.get('impacto') == 'ALTO']
+                        medios = [x for x in items if x.get('impacto') == 'MEDIO']
+                        
+                        if altos:
+                            mensaje_final += "🚨 *Impacto ALTO*\n"
+                            for p in altos:
+                                mensaje_final += formatear_item(p) + "\n"
+                        
+                        if medios:
+                            mensaje_final += "⚠️ *Impacto MEDIO*\n"
+                            for p in medios:
+                                mensaje_final += formatear_item(p) + "\n"
+                        
+                        mensaje_final += "----------------------------------------\n\n"
 
-            except Exception as e:
-                    errores_saturacion = ["503", "overloaded", "429", "quota"]
+                    if not mensaje_final:
+                        mensaje_final = "✅ *Sin novedades legislativas ni normativas relevantes hoy.*"
+
+                    return mensaje_final, todos_los_detalles_para_excel
+
+                except Exception as e:
+                    errores_saturacion = ["503", "overloaded", "429", "quota", "Resource has been exhausted"]
                     es_saturacion = any(err in str(e) for err in errores_saturacion)
                     
                     if es_saturacion:
@@ -157,6 +173,6 @@ class AnalistaLegislativo:
                         continue 
                     else:
                         print(f"❌ Error no recuperable con {modelo}: {e}")
-                        break
+                        break 
         
         return "Error en análisis IA", []
