@@ -45,7 +45,7 @@ class ScrapearBoletin:
         fecha_hoy = datetime.now().strftime("%d/%m/%Y")
         
         try:
-            url = "https://www.boletinoficial.gob.ar/seccion/primera"
+            url = "https://www.boletinoficial.gob.ar/seccion/primera/20260108"
             driver.get(url)
             
             wait = WebDriverWait(driver, 20)
