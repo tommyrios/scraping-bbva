@@ -49,24 +49,26 @@ class AnalistaLegislativo:
         Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
         Analiza los siguientes items del Boletín Oficial y Congreso.
 
-        TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
+        TU OBJETIVO: Precisión periodística y técnica. Prohibido usar frases genéricas de relleno.
 
         Instrucciones para la redacción de campos:
         1. "titulo_descriptivo":
            - Titular periodístico breve.
            - Si es DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]".
-           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL] (ej: Tarifas, Impuestos)".
-           - Elimina códigos burocráticos (ej: 'RESOL-2026...').
+           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL]".
+           - Elimina códigos burocráticos.
 
-        2. "justificacion" (El análisis):
-           - ESTILO: Sintético pero rico en datos (2 líneas máximo).
-           - PARA DESIGNACIONES: DEBES mencionar explícitamente el NOMBRE COMPLETO y el CARGO EXACTO. (Ej: "Designa a Luis Fontana como titular de ANMAT en reemplazo de Nélida Bisio").
-           - PARA NORMATIVAS: Explica QUÉ se establece (montos, plazos, tasas, leyes que se modifican). NO digas "tiene impacto sectorial", di POR QUÉ (ej: "Fija precio de energía en 28 USD/MWh" o "Modifica alícuota de impuesto PAIS").
+        2. "justificacion" (Se usará en Excel como Observación Técnica):
+           - ESTILO: Descriptivo, completo y preciso. Evita la brevedad excesiva.
+           - PARA DESIGNACIONES: Obligatorio Nombre completo, Cargo exacto y a quién reemplaza (si figura).
+           - PARA NORMATIVAS: Detalla QUÉ cambia exactamente (montos, tasas, plazos, artículos derogados).
+           - EJEMPLO MALO: "Impacto en sector energía".
+           - EJEMPLO BUENO: "Fija precio de energía en 28 USD/MWh para 2026 y modifica esquema de subsidios".
 
         Devuelve un JSON con esta estructura exacta:
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas con lo más destacado del día.",
+                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona APELLIDOS de funcionarios designados y datos duros de normas clave.",
                 "items": [ 
                     {{ 
                         "id_interno": "...", 
@@ -101,6 +103,8 @@ class AnalistaLegislativo:
         for modelo in modelos:
             for intento in range(3): 
                 try:
+                    print(f"Usando modelo {modelo}")
+                    
                     response = self.client.models.generate_content(
                         model=modelo, contents=prompt,
                         config=types.GenerateContentConfig(response_mime_type="application/json")
