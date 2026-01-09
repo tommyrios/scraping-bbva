@@ -1,6 +1,8 @@
 import os
 import json
 import time
+import requests
+from bs4 import BeautifulSoup
 from google import genai
 from google.genai import types
 
@@ -17,6 +19,37 @@ class AnalistaLegislativo:
             return f"https://www.senado.gob.ar/parlamentario/comisiones/verExp/{exp}"
         return ""
 
+    def traer_texto_boletin(self, url):
+        """
+        Entra a la URL del Boletín Oficial y extrae el texto de la norma
+        para que la IA pueda encontrar los nombres de los funcionarios.
+        """
+        if not url or "boletinoficial.gob.ar" not in url:
+            return ""
+        
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+
+                contenido = soup.find('div', {'id': 'avisodetalle'})
+                if not contenido:
+                    contenido = soup.find('div', class_='detalle-aviso')
+                
+                if contenido:
+                    texto_limpio = contenido.get_text(separator=' ', strip=True)
+
+                    return texto_limpio[:8000] 
+            
+            return ""
+        except Exception as e:
+            print(f"⚠️ No se pudo leer contenido de {url}: {e}")
+            return ""
+
     def analizar_proyectos(self, filas_nuevas):
         if not self.client or not filas_nuevas:
             return "Sin novedades relevantes.", []
@@ -24,23 +57,34 @@ class AnalistaLegislativo:
         lista_proy_texto = []
         meta_data_por_id = {} 
 
+        print(f">>> Recopilando texto completo de {len(filas_nuevas)} items (esto puede tardar unos segundos)...")
+
         for fila in filas_nuevas:
             id_interno = fila[0]
             origen = fila[1]
             expediente = fila[2]
             titulo = fila[5]
             
+            texto_extra = ""
+            
             if "Boletin" in origen:
                 link = fila[6]
+                # AQUÍ ESTÁ LA MAGIA: Traemos el texto real
+                texto_extra = self.traer_texto_boletin(link)
             else:
                 link = self.generar_link(origen, expediente)
             
             meta_data_por_id[id_interno] = {"titulo": titulo, "link": link, "origen": origen}
             
+            # Combinamos el título corto con el texto completo extraído
+            descripcion_completa = titulo
+            if texto_extra:
+                descripcion_completa += f" || CONTENIDO DETALLADO: {texto_extra}"
+
             item = {
                 "id_interno": id_interno, 
                 "referencia": expediente,
-                "descripcion": titulo,
+                "descripcion": descripcion_completa, # Enviamos TODO a la IA
                 "fuente": origen
             }
             lista_proy_texto.append(str(item))
@@ -48,27 +92,27 @@ class AnalistaLegislativo:
         prompt = f"""
         Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
         Analiza los siguientes items del Boletín Oficial y Congreso.
+        
+        IMPORTANTE: Se te ha provisto el "CONTENIDO DETALLADO" de las normas. ÚSALO para encontrar nombres propios.
 
-        TU OBJETIVO: Precisión periodística y técnica. Prohibido usar frases genéricas de relleno.
+        TU OBJETIVO: Precisión absoluta.
 
         Instrucciones para la redacción de campos:
         1. "titulo_descriptivo":
            - Titular periodístico breve.
-           - Si es DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]".
+           - Si es DESIGNACIÓN: "Designación de [NOMBRE Y APELLIDO ENCONTRADO EN EL TEXTO] en [ORGANISMO]".
            - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL]".
            - Elimina códigos burocráticos.
 
-        2. "justificacion" (Se usará en Excel como Observación Técnica):
-           - ESTILO: Descriptivo, completo y preciso. Evita la brevedad excesiva.
-           - PARA DESIGNACIONES: Obligatorio Nombre completo, Cargo exacto y a quién reemplaza (si figura).
-           - PARA NORMATIVAS: Detalla QUÉ cambia exactamente (montos, tasas, plazos, artículos derogados).
-           - EJEMPLO MALO: "Impacto en sector energía".
-           - EJEMPLO BUENO: "Fija precio de energía en 28 USD/MWh para 2026 y modifica esquema de subsidios".
+        2. "justificacion" (Observación Técnica):
+           - ESTILO: Descriptivo y preciso.
+           - PARA DESIGNACIONES: Busca en el texto provisto el nombre de la persona designada. Ejemplo: "El decreto designa a Fernando Iglesias...".
+           - PARA NORMATIVAS: Detalla montos, tasas y plazos extraídos del texto.
 
         Devuelve un JSON con esta estructura exacta:
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona APELLIDOS de funcionarios designados y datos duros de normas clave.",
+                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona explícitamente los APELLIDOS de los funcionarios designados que encuentres en el texto.",
                 "items": [ 
                     {{ 
                         "id_interno": "...", 
@@ -91,8 +135,8 @@ class AnalistaLegislativo:
 
         CRITERIOS DE IMPACTO:
         - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral).
-        - MEDIO: Designaciones de funcionarios (Secretarios, Directores, Embajadores) y normas sectoriales específicas.
-        - BAJO: Temas de interés general, declaraciones de interés o efemérides.
+        - MEDIO: Designaciones de funcionarios y normas sectoriales específicas.
+        - BAJO: Temas de interés general.
 
         Datos a analizar:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
