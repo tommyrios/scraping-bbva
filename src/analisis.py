@@ -29,14 +29,13 @@ class AnalistaLegislativo:
                 .container { max-width: 700px; margin: 20px auto; background: #fff; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
                 
                 /* Header Corporativo BBVA */
-                .header { background-color: #072146; /* Azul BBVA Oficial más oscuro */ color: white; padding: 35px 20px; text-align: center; }
+                .header { background-color: #072146; color: white; padding: 35px 20px; text-align: center; }
                 
-                /* Contenedor del Logo para centrado perfecto */
                 .logo-container { margin-bottom: 20px; text-align: center; }
                 
-                /* Logo: Usamos versión optimizada (300px) para que cargue rápido */
+                /* Logo optimizado */
                 .logo-img { 
-                    height: 35px; /* Altura fija para consistencia */
+                    height: 35px; 
                     width: auto; 
                     display: inline-block;
                 }
@@ -44,7 +43,7 @@ class AnalistaLegislativo:
                 .header h1 { margin: 0; font-size: 24px; font-weight: 500; letter-spacing: 0.5px; color: #ffffff; }
                 .header h2 { margin: 8px 0 0; font-size: 14px; opacity: 0.9; font-weight: 300; text-transform: uppercase; letter-spacing: 2px; color: #a4c4e0; }
                 
-                .content { padding: 40px 30px; background-color: #ffffff; }
+                .content { padding: 40px 30px; background-color: #ffffff; min-height: 200px; }
                 
                 /* Secciones */
                 .section-title { color: #072146; border-bottom: 2px solid #004481; padding-bottom: 8px; margin-top: 30px; margin-bottom: 20px; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -52,7 +51,7 @@ class AnalistaLegislativo:
                 /* Resumen */
                 .resumen-block { background-color: #f4f8fb; border-left: 4px solid #1973b8; padding: 15px 20px; margin-bottom: 25px; font-style: italic; color: #555; font-size: 14px; border-radius: 0 4px 4px 0; }
                 
-                /* Items / Tarjetas */
+                /* Items */
                 .item { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eeeeee; }
                 .item:last-child { border-bottom: none; }
                 
@@ -60,18 +59,19 @@ class AnalistaLegislativo:
                 .badges-row { margin-bottom: 10px; }
                 .badge { padding: 5px 10px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; display: inline-block; vertical-align: middle; margin-right: 6px; letter-spacing: 0.5px;}
                 
-                /* Colores de Impacto BBVA Style */
-                .bg-alto { background-color: #da3851; color: white; } /* Rojo Alerta */
-                .bg-medio { background-color: #f8cd51; color: #121212; } /* Amarillo Core */
+                .bg-alto { background-color: #da3851; color: white; }
+                .bg-medio { background-color: #f8cd51; color: #121212; }
                 .bg-ref { background-color: #f2f2f2; color: #666; border: 1px solid #ddd; }
                 
-                /* Contenido Item */
                 .item-title { font-size: 17px; font-weight: 700; color: #121212; margin: 0 0 8px 0; line-height: 1.4; }
                 .justificacion { font-size: 15px; color: #444; margin-bottom: 15px; text-align: justify; line-height: 1.6; }
                 
-                /* Botón */
                 .btn-link { display: inline-block; font-size: 11px; color: #004481; text-decoration: none; font-weight: 700; border: 1px solid #004481; padding: 10px 18px; border-radius: 2px; transition: background 0.2s; text-transform: uppercase; }
                 .btn-link:hover { background-color: #004481; color: white; }
+                
+                /* Mensaje Sin Novedades */
+                .empty-state { text-align: center; padding: 40px 20px; color: #666; }
+                .empty-icon { font-size: 40px; margin-bottom: 15px; display: block; opacity: 0.5; }
                 
                 /* Footer */
                 .footer { background-color: #f4f4f4; padding: 25px; text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eaeaea; }
@@ -100,9 +100,24 @@ class AnalistaLegislativo:
         </html>
         """
 
+    def _generar_html_vacio(self, mensaje="Sin novedades relevantes en esta ejecución."):
+        """Helper para generar reporte vacío pero con Branding."""
+        html = self._generar_html_header()
+        html += f"""
+            <div class="empty-state">
+                <span class="empty-icon">✅</span>
+                <h3>Sin Novedades</h3>
+                <p>{mensaje}</p>
+            </div>
+        """
+        html += self._generar_html_footer()
+        return html
+
     def analizar_proyectos(self, filas_nuevas):
+        # 1. SI NO HAY FILAS NUEVAS O NO HAY CLIENTE
         if not self.client or not filas_nuevas:
-            return "Sin novedades relevantes.", []
+            # AHORA RETORNA HTML BONITO EN LUGAR DE TEXTO PLANO
+            return self._generar_html_vacio("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
 
         lista_proy_texto = []
         meta_data_por_id = {} 
@@ -118,7 +133,6 @@ class AnalistaLegislativo:
             else:
                 link = self.generar_link(origen, expediente)
             
-            # Limpieza básica
             titulo_simple = contenido_completo.split('\n')[0].replace("TITULO: ", "").replace("NORMA: ", "")
             meta_data_por_id[id_interno] = {"titulo": titulo_simple, "link": link, "origen": origen}
             
@@ -130,7 +144,6 @@ class AnalistaLegislativo:
             }
             lista_proy_texto.append(str(item))
 
-        # --- TU PROMPT EXACTO ---
         prompt = f"""
         Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
         Analiza los siguientes items del Boletín Oficial y Congreso.
@@ -198,9 +211,8 @@ class AnalistaLegislativo:
                     )
                     data = json.loads(response.text)
                     
-                    # --- GENERACIÓN DE REPORTE HTML ---
                     html_output = self._generar_html_header()
-                    todos_los_detalles_para_excel = [] # Aquí SÍ guardamos todo (incluso lo bajo)
+                    todos_los_detalles_para_excel = [] 
 
                     secciones = [
                         ("Boletín Oficial", "boletin"),
@@ -215,32 +227,24 @@ class AnalistaLegislativo:
                         items = bloque.get("items", [])
                         resumen = bloque.get("resumen", "")
                         
-                        # 1. Guardamos TODOS los items para el Excel (Auditoría completa)
                         todos_los_detalles_para_excel.extend(items)
 
-                        # 2. FILTRO PARA EL EMAIL (HTML): Solo ALTO y MEDIO
+                        # FILTRO PARA EL EMAIL: Solo ALTO y MEDIO
                         items_email = [p for p in items if p.get('impacto', 'BAJO').upper() != 'BAJO']
 
-                        # Si después de filtrar no queda nada, saltamos la sección en el mail
                         if not items_email and "Sin movimientos" in resumen:
                             continue
                         
-                        # Si hay items relevantes O un resumen importante, mostramos la sección
                         if items_email:
                             hay_contenido_relevante_total = True
-
-                            # A. Título Sección
                             html_output += f'<div class="section-title">{titulo_seccion}</div>'
                             
-                            # B. Resumen
                             if resumen:
                                 html_output += f'<div class="resumen-block">{resumen}</div>'
 
-                            # C. Ordenar: Alto -> Medio
                             orden_impacto = {"ALTO": 1, "MEDIO": 2}
                             items_ordenados = sorted(items_email, key=lambda x: orden_impacto.get(x.get("impacto", "MEDIO"), 99))
 
-                            # D. Renderizar Items
                             for p in items_ordenados:
                                 id_ref = p.get('id_interno')
                                 meta = meta_data_por_id.get(id_ref, {})
@@ -254,7 +258,7 @@ class AnalistaLegislativo:
                                 clase_badge = "bg-medio"
                                 if impacto == "ALTO": clase_badge = "bg-alto"
 
-                                html_output += f"""
+                                html_output += f '''
                                 <div class="item">
                                     <div class="badges-row">
                                         <span class="badge bg-ref">{ref}</span>
@@ -264,12 +268,15 @@ class AnalistaLegislativo:
                                     <div class="justificacion">{justificacion}</div>
                                     <a href="{link_web}" target="_blank" class="btn-link">Ver Texto Oficial &rarr;</a>
                                 </div>
-                                """
+                                '''
 
                     if not hay_contenido_relevante_total:
+                        # Si la IA corrió pero todo fue BAJO impacto, mostramos el empty state bonito
                         html_output += """
-                        <div style="text-align: center; padding: 40px; color: #888;">
-                            <i>No se encontraron novedades de <b>Alto</b> o <b>Medio</b> impacto para el sector en el día de la fecha.</i>
+                        <div class="empty-state">
+                            <span class="empty-icon">✅</span>
+                            <h3>Sin Novedades de Impacto</h3>
+                            <p>Se han analizado las normas del día, pero ninguna alcanza el nivel de impacto <b>Alto</b> o <b>Medio</b> para el sector.</p>
                         </div>
                         """
 
@@ -280,12 +287,11 @@ class AnalistaLegislativo:
                 except Exception as e:
                     errores_saturacion = ["503", "overloaded", "429", "quota", "Resource has been exhausted"]
                     if any(err in str(e) for err in errores_saturacion):
-                        tiempo_espera = 5 * (intento + 1)
-                        print(f"⚠️ Modelo {modelo} saturado. Reintentando en {tiempo_espera}s...")
-                        time.sleep(tiempo_espera)
+                        time.sleep(5)
                         continue 
                     else:
                         print(f"❌ Error modelo: {e}")
                         break 
         
-        return "Error en análisis IA", []
+        # Si falla todo, devolvemos HTML de error bonito
+        return self._generar_html_vacio("Ocurrió un error al procesar el análisis con Inteligencia Artificial."), []
