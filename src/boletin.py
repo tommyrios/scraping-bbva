@@ -57,6 +57,9 @@ class ScrapearBoletin:
                     h2 = header.find('h2')
                     if h2: data["norma"] = h2.get_text(strip=True)
 
+                if data["norma"] == "S/N":
+                    data["norma"] = "Aviso Oficial"
+
                 # --- 2. EXTRAER TEXTO ---
                 contenido = soup.find('div', {'id': 'cuerpoDetalleAviso'}) or \
                             soup.find('div', {'id': 'avisodetalle'}) or \
