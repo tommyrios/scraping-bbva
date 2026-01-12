@@ -1,82 +1,93 @@
-import time
+import requests
+from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import urllib3
+import time
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class ScrapearBoletin:
     def __init__(self):
-        self.filtros_organismo = [
-            "BANCO CENTRAL", "CNV", "COMISIÓN NACIONAL DE VALORES", 
-            "ECONOMÍA", "HACIENDA", "FINANZAS", "AFIP", "ARCA", "UIF", 
-            "PODER LEGISLATIVO", "PODER EJECUTIVO", "CAPITAL HUMANO"
-        ]
-        self.filtros_norma = ["LEY", "DECRETO", "DNU", "RESOLUCIÓN GENERAL"]
+        self.base_url = "https://www.boletinoficial.gob.ar"
+        self.api_url = "https://www.boletinoficial.gob.ar/v2/normas/secciones/primera" 
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': 'https://www.boletinoficial.gob.ar/seccion/primera'
+        }
 
-    def configurar_browser(self):
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        return webdriver.Chrome(options=chrome_options)
-
-    def es_relevante(self, organismo, norma_tipo):
-        org_upper = organismo.upper()
-        norma_upper = norma_tipo.upper()
-        
-        for f in self.filtros_norma:
-            if f in norma_upper:
-                return True
-        
-        for f in self.filtros_organismo:
-            if f in org_upper:
-                return True
-        return False
+    def obtener_texto_completo(self, id_aviso):
+        url_detalle = f"https://www.boletinoficial.gob.ar/detalleAviso/primera/{id_aviso}"
+        try:
+            # Pausa técnica para estabilidad
+            time.sleep(0.3)
+            response = requests.get(url_detalle, headers=self.headers, verify=False, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                contenido = soup.find('div', {'id': 'avisodetalle'})
+                if not contenido:
+                    contenido = soup.find('div', class_='detalle-aviso')
+                
+                if contenido:
+                    texto = contenido.get_text(separator='\n', strip=True)
+                    texto = texto.replace("Boletín Oficial de la República Argentina", "")
+                    return texto[:15000] # Limite generoso para asegurar nombres
+            return ""
+        except:
+            return ""
 
     def scrape(self):
-        print(">>> 📜 Iniciando Scraper Boletín Oficial...")
-        driver = self.configurar_browser()
-        datos = []
-        fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-        
+        print(">>> Iniciando scraping Boletín Oficial (con texto completo)...")
         try:
-            url = "https://www.boletinoficial.gob.ar/seccion/primera/20260108"
-            driver.get(url)
+            fecha_hoy = datetime.now().strftime("%Y%m%d")
+            params = {'fecha': fecha_hoy}
             
-            wait = WebDriverWait(driver, 20)
-            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "linea-aviso")))
-            time.sleep(3)
+            response = requests.get(self.api_url, headers=self.headers, params=params, verify=False, timeout=15)
+            if response.status_code != 200: return pd.DataFrame()
 
-            avisos_elements = driver.find_elements(By.XPATH, "//div[contains(@class, 'linea-aviso')]/..")
+            data_json = response.json()
+            lista_normas = data_json.get('data', [])
             
-            for aviso in avisos_elements:
-                try:
-                    texto_completo = aviso.text.split('\n')
-                    organismo = texto_completo[0] if len(texto_completo) > 0 else ""
-                    norma = texto_completo[1] if len(texto_completo) > 1 else ""
-                    sintesis = texto_completo[2] if len(texto_completo) > 2 else ""
-                    link = aviso.get_attribute("href")
+            if not lista_normas:
+                print("📭 Sin normas hoy.")
+                return pd.DataFrame()
 
-                    if self.es_relevante(organismo, norma):
-                        datos.append({
-                            'Expediente': norma,       
-                            'Autor': organismo,        
-                            'Fecha de inicio': fecha_hoy, 
-                            'Proyecto': sintesis,      
-                            'Comisiones': link         
-                        })
+            datos_procesados = []
+            print(f"   🔍 Procesando {len(lista_normas)} normas...")
 
-                except Exception:
-                    continue
+            for item in lista_normas:
+                id_norma = item.get('idAviso')
+                numero = item.get('numeroNorma', 'S/N')
+                anio = item.get('anioNorma', '')
+                tipo = item.get('tipoNorma', '')
+                organismo = item.get('organismo', 'Poder Ejecutivo')
+                titulo_corto = item.get('detalle', '')
+                
+                ref = f"{tipo} {numero}/{anio}"
+                link = f"https://www.boletinoficial.gob.ar/detalleAviso/primera/{id_norma}/{fecha_hoy}"
+
+                # Descarga del texto real
+                texto_full = self.obtener_texto_completo(id_norma)
+                
+                # Combinamos para la IA, pero mantenemos estructura
+                contenido_ia = f"TITULO: {titulo_corto}\n\n--- TEXTO OFICIAL ---\n{texto_full}"
+
+                datos_procesados.append({
+                    "ID": f"BO{id_norma}",
+                    "Origen": "Boletin Oficial",
+                    "Expediente": ref,
+                    "Autor": organismo,
+                    "Fecha de inicio": datetime.now().strftime("%d/%m/%Y"),
+                    "Proyecto": contenido_ia, # Esto lee la IA
+                    "Comisiones": link,
+                    "Partido Político": "Oficialismo",
+                    "Provincia": "Nacional"
+                })
+
+            return pd.DataFrame(datos_procesados)
 
         except Exception as e:
-            print(f"❌ Error Boletín: {e}")
-        finally:
-            driver.quit()
-
-        return pd.DataFrame(datos)
+            print(f"❌ Error BO: {e}")
+            return pd.DataFrame()

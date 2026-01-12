@@ -1,8 +1,6 @@
 import os
 import json
 import time
-import requests
-from bs4 import BeautifulSoup
 from google import genai
 from google.genai import types
 
@@ -19,42 +17,6 @@ class AnalistaLegislativo:
             return f"https://www.senado.gob.ar/parlamentario/comisiones/verExp/{exp}"
         return ""
 
-    def traer_texto_boletin(self, url):
-        """
-        Entra a la URL del Boletín Oficial y extrae el texto real de la norma
-        para que la IA pueda encontrar los nombres propios.
-        """
-        if not url or "boletinoficial" not in url:
-            return ""
-        
-        try:
-            # Headers para simular un navegador y evitar bloqueos
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            # Timeout corto para no demorar todo el proceso
-            response = requests.get(url, headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # El texto suele estar en un div con id 'avisodetalle'
-                contenido = soup.find('div', {'id': 'avisodetalle'})
-                
-                # Fallback si cambia el diseño
-                if not contenido:
-                    contenido = soup.find('div', class_='detalle-aviso')
-                
-                if contenido:
-                    # Limpiamos y cortamos el texto (8000 caracteres es suficiente para la parte resolutiva)
-                    texto = contenido.get_text(separator=' ', strip=True)
-                    return texto[:8000]
-            
-            return ""
-        except Exception as e:
-            print(f"⚠️ No se pudo leer contenido de {url}: {e}")
-            return ""
-
     def analizar_proyectos(self, filas_nuevas):
         if not self.client or not filas_nuevas:
             return "Sin novedades relevantes.", []
@@ -62,59 +24,51 @@ class AnalistaLegislativo:
         lista_proy_texto = []
         meta_data_por_id = {} 
 
-        print(f">>> Leyendo contenido detallado de {len(filas_nuevas)} normas (Web Scraping)...")
-
         for fila in filas_nuevas:
             id_interno = fila[0]
             origen = fila[1]
             expediente = fila[2]
-            titulo = fila[5]
-            
-            texto_extra = ""
+            # En fila[5] viene el texto completo desde el scraper
+            contenido_completo = fila[5] 
             
             if "Boletin" in origen:
                 link = fila[6]
-                # [cite_start]AQUÍ ESTÁ LA CLAVE: Traemos el texto real de la web [cite: 1]
-                texto_extra = self.traer_texto_boletin(link)
             else:
                 link = self.generar_link(origen, expediente)
             
-            meta_data_por_id[id_interno] = {"titulo": titulo, "link": link, "origen": origen}
+            # Guardamos metadata básica
+            titulo_simple = contenido_completo.split('\n')[0].replace("TITULO: ", "")
+            meta_data_por_id[id_interno] = {"titulo": titulo_simple, "link": link, "origen": origen}
             
-            # Preparamos la descripción para la IA: Título + Contenido Real
-            descripcion_full = titulo
-            if texto_extra:
-                descripcion_full += f"\n\n--- TEXTO COMPLETO DE LA NORMA ---\n{texto_extra}"
-
             item = {
                 "id_interno": id_interno, 
                 "referencia": expediente,
-                "descripcion": descripcion_full, # Le pasamos todo
+                "descripcion": contenido_completo, # Pasa el texto full a la IA
                 "fuente": origen
             }
             lista_proy_texto.append(str(item))
 
         prompt = f"""
         Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
-        Analiza los siguientes items. Se te ha provisto el TEXTO COMPLETO de las normas. ÚSALO.
+        Analiza los siguientes items. El campo 'descripcion' contiene el TEXTO COMPLETO.
 
-        TU OBJETIVO: Precisión absoluta con nombres y datos.
+        TU OBJETIVO: Precisión absoluta. Extrae nombres propios y datos duros del texto provisto.
 
-        Instrucciones para redacción:
+        Instrucciones de redacción:
         1. "titulo_descriptivo":
-           - Titular periodístico.
-           - DESIGNACIONES: "Designación de [NOMBRE APELLIDO] en [ORGANISMO]". Busca el nombre en el texto provisto.
-           - NORMATIVAS: "Cambios en [TEMA] (ej: Tarifas, Impuestos)".
+           - Titular periodístico breve.
+           - DESIGNACIONES: "Designación de [NOMBRE APELLIDO] en [ORGANISMO]". (Busca el nombre en el texto).
+           - NORMATIVAS: "Cambios en [TEMA]".
 
-        2. "justificacion" (Observación Técnica):
-           - ESTILO: Descriptivo y preciso.
+        2. "justificacion" (Para Excel - Observaciones):
+           - ESTILO: Descriptivo y técnico.
            - DESIGNACIONES: "Designa a [NOMBRE COMPLETO] como [CARGO]. Reemplaza a [ANTERIOR] (si figura)."
-           - NORMATIVAS: Detalla montos, tasas y plazos extraídos del texto.
+           - NORMATIVAS: Detalla montos, tasas, plazos y artículos modificados.
 
         Devuelve un JSON con esta estructura exacta:
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona APELLIDOS de los funcionarios designados.",
+                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona APELLIDOS de designados.",
                 "items": [ 
                     {{ 
                         "id_interno": "...", 
@@ -130,9 +84,9 @@ class AnalistaLegislativo:
         }}
 
         CRITERIOS DE IMPACTO:
-        - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral).
-        - MEDIO: Designaciones de funcionarios y normas sectoriales.
-        - BAJO: Temas de interés general.
+        - ALTO: Normas vigentes clave (Financiero, Cambiario, Impositivo).
+        - MEDIO: Designaciones y normas sectoriales.
+        - BAJO: Temas generales.
 
         Datos a analizar:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
@@ -144,7 +98,6 @@ class AnalistaLegislativo:
             for intento in range(3): 
                 try:
                     print(f"Usando modelo {modelo}")
-                    
                     response = self.client.models.generate_content(
                         model=modelo, contents=prompt,
                         config=types.GenerateContentConfig(response_mime_type="application/json")
@@ -164,6 +117,7 @@ class AnalistaLegislativo:
                         id_ref = p.get('id_interno')
                         meta = meta_data_por_id.get(id_ref, {})
                         
+                        # Usamos el título generado por IA que es más limpio
                         titulo_mostrar = p.get("titulo_descriptivo", meta.get("titulo", "Sin título"))
                         link_web = meta.get("link", "")
                         ref = p.get('referencia', '')
@@ -180,43 +134,34 @@ class AnalistaLegislativo:
                         
                         todos_los_detalles_para_excel.extend(items)
 
-                        if not items and "Sin movimientos" in resumen:
-                            continue
+                        if not items and "Sin movimientos" in resumen: continue
 
-                        mensaje_final += f"📢 *{titulo_seccion}*\n"
-                        mensaje_final += f"{resumen}\n\n"
+                        mensaje_final += f"📢 *{titulo_seccion}*\n{resumen}\n\n"
 
                         altos = [x for x in items if x.get('impacto') == 'ALTO']
                         medios = [x for x in items if x.get('impacto') == 'MEDIO']
                         
                         if altos:
                             mensaje_final += "🚨 *Impacto ALTO*\n"
-                            for p in altos:
-                                mensaje_final += formatear_item(p) + "\n"
+                            for p in altos: mensaje_final += formatear_item(p) + "\n"
                         
                         if medios:
                             mensaje_final += "⚠️ *Impacto MEDIO*\n"
-                            for p in medios:
-                                mensaje_final += formatear_item(p) + "\n"
+                            for p in medios: mensaje_final += formatear_item(p) + "\n"
                         
                         mensaje_final += "----------------------------------------\n\n"
 
-                    if not mensaje_final:
-                        mensaje_final = "✅ *Sin novedades legislativas ni normativas relevantes hoy.*"
+                    if not mensaje_final: mensaje_final = "✅ *Sin novedades relevantes.*"
 
                     return mensaje_final, todos_los_detalles_para_excel
 
                 except Exception as e:
-                    errores_saturacion = ["503", "overloaded", "429", "quota", "Resource has been exhausted"]
-                    es_saturacion = any(err in str(e) for err in errores_saturacion)
-                    
-                    if es_saturacion:
-                        tiempo_espera = 5 * (intento + 1) 
-                        print(f"⚠️ Modelo {modelo} saturado. Reintentando en {tiempo_espera}s... ({intento+1}/3)")
-                        time.sleep(tiempo_espera)
-                        continue 
+                    errores_saturacion = ["503", "overloaded", "429", "quota"]
+                    if any(err in str(e) for err in errores_saturacion):
+                        time.sleep(5 * (intento + 1))
+                        continue
                     else:
-                        print(f"❌ Error no recuperable con {modelo}: {e}")
-                        break 
+                        print(f"❌ Error {modelo}: {e}")
+                        break
         
         return "Error en análisis IA", []
