@@ -13,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 class ScrapearBoletin:
     def __init__(self):
         # Usamos la vista visual de la "Primera Sección" (Leyes, Decretos, Resoluciones)
-        self.url_seccion = "https://www.boletinoficial.gob.ar/seccion/primera"
+        self.url_seccion = "https://www.boletinoficial.gob.ar/seccion/primera/20260108"
         self.base_url = "https://www.boletinoficial.gob.ar"
         
         # Headers para simular un navegador real y evitar bloqueos
