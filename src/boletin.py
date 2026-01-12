@@ -12,7 +12,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 class ScrapearBoletin:
     def __init__(self):
         self.base_url = "https://www.boletinoficial.gob.ar"
-        self.fecha_target_str = "20260108" 
+        self.fecha_target_str = "20260109" 
         
         if self.fecha_target_str:
             self.url_seccion = f"https://www.boletinoficial.gob.ar/seccion/primera/{self.fecha_target_str}"
