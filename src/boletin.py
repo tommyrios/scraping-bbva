@@ -116,8 +116,6 @@ class ScrapearBoletin:
                     "Fecha de inicio": datetime.now().strftime("%d/%m/%Y"),
                     "Proyecto": contenido_ia,
                     "Comisiones": link,
-                    "Partido Político": "Oficialismo",
-                    "Provincia": "Nacional"
                 })
 
             return pd.DataFrame(datos_procesados)
