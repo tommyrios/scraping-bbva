@@ -6,30 +6,46 @@ import urllib3
 import time
 import json
 
+# Desactivar advertencias de certificado SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class ScrapearBoletin:
     def __init__(self):
         self.base_url = "https://www.boletinoficial.gob.ar"
         self.api_url = "https://www.boletinoficial.gob.ar/v2/normas/secciones/primera" 
-        # Headers completos para parecer un navegador real y evitar el error JSON
+        
+        # Headers estándar de Chrome
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
             'Referer': 'https://www.boletinoficial.gob.ar/seccion/primera/20260108',
-            'Origin': 'https://www.boletinoficial.gob.ar',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-            'X-Requested-With': 'XMLHttpRequest'
         }
+        
+        # CREAMOS UNA SESIÓN (Esto guarda las cookies automáticamente)
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
+        self.session.verify = False # Ignorar SSL en toda la sesión
+
+    def inicializar_cookies(self):
+        """
+        Visita la portada para obtener las cookies de seguridad antes de llamar a la API.
+        """
+        try:
+            print("   🍪 Obteniendo cookies de sesión...")
+            # Visitamos la home primero
+            self.session.get(self.base_url, timeout=10)
+            # Visitamos la sección primera para "calentar" la navegación
+            self.session.get(f"{self.base_url}/seccion/primera", timeout=10)
+            return True
+        except Exception as e:
+            print(f"⚠️ Error inicializando cookies: {e}")
+            return False
 
     def obtener_texto_completo(self, id_aviso):
         url_detalle = f"https://www.boletinoficial.gob.ar/detalleAviso/primera/{id_aviso}"
         try:
-            time.sleep(0.3)
-            response = requests.get(url_detalle, headers=self.headers, verify=False, timeout=10)
+            # Usamos self.session en lugar de requests directo
+            response = self.session.get(url_detalle, timeout=10)
             
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
@@ -44,36 +60,37 @@ class ScrapearBoletin:
             return ""
 
     def scrape(self):
-        print(">>> Iniciando scraping Boletín Oficial (con texto completo)...")
+        print(">>> Iniciando scraping Boletín Oficial...")
+        
+        # 1. Inicializamos la sesión (CLAVE para evitar bloqueo)
+        self.inicializar_cookies()
+        
         try:
             fecha_hoy = datetime.now().strftime("%Y%m%d")
             params = {'fecha': fecha_hoy}
             
-            # Petición a la API
-            response = requests.get(self.api_url, headers=self.headers, params=params, verify=False, timeout=15)
+            print(f"   📡 Consultando API para fecha: {fecha_hoy}...")
+            # Usamos la sesión con las cookies ya cargadas
+            response = self.session.get(self.api_url, params=params, timeout=15)
             
-            # Diagnóstico de error si no es 200
             if response.status_code != 200:
-                print(f"❌ Error HTTP {response.status_code}: {response.text[:100]}")
+                print(f"❌ Error HTTP {response.status_code}")
                 return pd.DataFrame()
 
-            # Intentamos parsear JSON con manejo de error específico
             try:
                 data_json = response.json()
             except json.JSONDecodeError:
-                print("❌ Error: La web devolvió HTML en lugar de JSON (Posible bloqueo o mantenimiento).")
-                # Imprimimos un poco del texto para ver qué devolvió realmente
-                print(f"   Respuesta recibida: {response.text[:200]}...")
+                print("❌ Bloqueo persistente: La web sigue devolviendo HTML.")
                 return pd.DataFrame()
 
             lista_normas = data_json.get('data', [])
             
             if not lista_normas:
-                print("📭 Sin normas publicadas hoy en la API.")
+                print("📭 No se encontraron normas hoy.")
                 return pd.DataFrame()
 
             datos_procesados = []
-            print(f"   🔍 Procesando {len(lista_normas)} normas...")
+            print(f"   🔍 Descargando textos de {len(lista_normas)} normas...")
 
             for item in lista_normas:
                 id_norma = item.get('idAviso')
@@ -86,10 +103,9 @@ class ScrapearBoletin:
                 ref = f"{tipo} {numero}/{anio}"
                 link = f"https://www.boletinoficial.gob.ar/detalleAviso/primera/{id_norma}/{fecha_hoy}"
 
-                # Descarga del texto real
+                # Descargamos texto completo usando la misma sesión
                 texto_full = self.obtener_texto_completo(id_norma)
                 
-                # Combinamos para la IA
                 contenido_ia = f"TITULO: {titulo_corto}\n\n--- TEXTO OFICIAL ---\n{texto_full}"
 
                 datos_procesados.append({
@@ -99,11 +115,17 @@ class ScrapearBoletin:
                     "Autor": organismo,
                     "Fecha de inicio": datetime.now().strftime("%d/%m/%Y"),
                     "Proyecto": contenido_ia,
-                    "Comisiones": link, # Link para el usuario
+                    "Comisiones": link,
+                    "Partido Político": "Oficialismo",
+                    "Provincia": "Nacional"
                 })
 
             return pd.DataFrame(datos_procesados)
 
         except Exception as e:
-            print(f"❌ Error crítico BO: {e}")
+            print(f"❌ Error crítico: {e}")
             return pd.DataFrame()
+
+if __name__ == "__main__":
+    s = ScrapearBoletin()
+    print(s.scrape())
