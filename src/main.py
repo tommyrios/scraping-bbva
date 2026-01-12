@@ -216,7 +216,7 @@ if __name__ == "__main__":
             if updates_bo_ia: sheet_bo.batch_update(updates_bo_ia, value_input_option='USER_ENTERED')
 
         print(">>> Enviando mail...")
-        sender.enviar_difusion(f"{reporte}\n{texto_analisis}")
+        sender.enviar_difusion(texto_analisis)
         print("✅ Éxito total.")
 
     except Exception as e:
