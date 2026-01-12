@@ -48,45 +48,41 @@ class AnalistaLegislativo:
             }
             lista_proy_texto.append(str(item))
 
+        
         prompt = f"""
-        Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
-        Analiza los siguientes items. El campo 'descripcion' contiene el TEXTO COMPLETO.
+        Actúa como Analista Regulatorio Senior para Banco BBVA.
+        Analiza las siguientes normas del Boletín Oficial. Tienes el texto completo.
 
-        TU OBJETIVO: Precisión absoluta. Extrae nombres propios y datos duros del texto provisto.
+        TU MISIÓN: Filtrar el ruido y destacar solo lo que impacta al negocio financiero/bancario/empresarial.
 
-        Instrucciones de redacción:
-        1. "titulo_descriptivo":
-           - Titular periodístico breve.
-           - DESIGNACIONES: "Designación de [NOMBRE APELLIDO] en [ORGANISMO]". (Busca el nombre en el texto).
-           - NORMATIVAS: "Cambios en [TEMA]".
+        CRITERIOS DE RELEVANCIA Y FILTRADO (ESTRICTO):
+        1. **DESCARTAR / IMPACTO BAJO**:
+           - Designaciones en áreas irrelevantes para un banco (Ej: Guardaparques, Cultura, Educación, Militar, Diplocacia de bajo nivel).
+           - Homologaciones de convenios colectivos de industrias ajenas (Ej: Pasteleros, Vidrio, Madera), salvo que marquen una pauta salarial general muy relevante.
+           - Premios, becas, declaraciones de interés cultural.
+           - Multas a particulares desconocidos (contrabando menor).
 
-        2. "justificacion" (Para Excel - Observaciones):
-           - ESTILO: Descriptivo y técnico.
-           - DESIGNACIONES: "Designa a [NOMBRE COMPLETO] como [CARGO]. Reemplaza a [ANTERIOR] (si figura)."
-           - NORMATIVAS: Detalla montos, tasas, plazos y artículos modificados.
+        2. **PRIORIDAD / IMPACTO ALTO o MEDIO**:
+           - Todo lo emanado por: BCRA, CNV, UIF, AFIP (ARCA), Secretaría de Comercio, Ministerio de Economía.
+           - Normas sobre: Tasas de interés, Deuda Pública (Letras, Bonos), Tipo de Cambio, Impuestos, Lavado de Dinero (PLA/FT), Seguridad Informática.
+           - Designaciones CLAVE: Directorio BCRA, Ministro de Economía, Jefatura de Gabinete.
 
-        Devuelve un JSON con esta estructura exacta:
+        FORMATO DE SALIDA (JSON):
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas. OBLIGATORIO: Menciona APELLIDOS de designados.",
-                "items": [ 
-                    {{ 
-                        "id_interno": "...", 
-                        "referencia": "...", 
-                        "titulo_descriptivo": "...",
-                        "impacto": "...", 
-                        "justificacion": "..." 
-                    }} 
+                "resumen": "Resumen ejecutivo de 3 líneas enfocado en impacto bancario/económico.",
+                "items": [
+                    {{
+                        "id_interno": "...",
+                        "referencia": "...", (Ej: Resolución 10/2026)
+                        "titulo_descriptivo": "...", (Titulo periodístico serio)
+                        "impacto": "ALTO", "MEDIO" o "BAJO",
+                        "justificacion": "..."
+                    }}
                 ]
             }},
-            "diputados": {{ "resumen": "...", "items": [] }},
-            "senado": {{ "resumen": "...", "items": [] }}
+            ... (diputados/senado igual) ...
         }}
-
-        CRITERIOS DE IMPACTO:
-        - ALTO: Normas vigentes clave (Financiero, Cambiario, Impositivo).
-        - MEDIO: Designaciones y normas sectoriales.
-        - BAJO: Temas generales.
 
         Datos a analizar:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
