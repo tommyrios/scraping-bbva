@@ -18,29 +18,36 @@ class AnalistaLegislativo:
         return ""
 
     def _generar_html_header(self):
-        """Genera el encabezado HTML con Logo BBVA (URL Pública) y estilos."""
+        """Genera el encabezado HTML con Logo BBVA optimizado y estilos."""
         return """
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
             <style>
-                body { font-family: 'Segoe UI', 'Roboto', Arial, sans-serif; color: #333; line-height: 1.6; background-color: #f4f4f4; margin: 0; padding: 0; }
+                body { font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; background-color: #f4f4f4; margin: 0; padding: 0; }
                 .container { max-width: 700px; margin: 20px auto; background: #fff; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
                 
                 /* Header Corporativo BBVA */
-                .header { background-color: #004481; color: white; padding: 30px 20px; text-align: center; }
+                .header { background-color: #072146; /* Azul BBVA Oficial más oscuro */ color: white; padding: 35px 20px; text-align: center; }
                 
-                /* Logo: Usamos una URL pública estable (Wikimedia) */
-                .logo-img { max-width: 150px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
+                /* Contenedor del Logo para centrado perfecto */
+                .logo-container { margin-bottom: 20px; text-align: center; }
                 
-                .header h1 { margin: 0; font-size: 22px; font-weight: 400; letter-spacing: 0.5px; }
-                .header h2 { margin: 5px 0 0; font-size: 13px; opacity: 0.8; font-weight: 300; text-transform: uppercase; letter-spacing: 1px;}
+                /* Logo: Usamos versión optimizada (300px) para que cargue rápido */
+                .logo-img { 
+                    height: 35px; /* Altura fija para consistencia */
+                    width: auto; 
+                    display: inline-block;
+                }
                 
-                .content { padding: 40px 30px; }
+                .header h1 { margin: 0; font-size: 24px; font-weight: 500; letter-spacing: 0.5px; color: #ffffff; }
+                .header h2 { margin: 8px 0 0; font-size: 14px; opacity: 0.9; font-weight: 300; text-transform: uppercase; letter-spacing: 2px; color: #a4c4e0; }
+                
+                .content { padding: 40px 30px; background-color: #ffffff; }
                 
                 /* Secciones */
-                .section-title { color: #004481; border-bottom: 2px solid #004481; padding-bottom: 8px; margin-top: 30px; margin-bottom: 20px; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+                .section-title { color: #072146; border-bottom: 2px solid #004481; padding-bottom: 8px; margin-top: 30px; margin-bottom: 20px; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
                 
                 /* Resumen */
                 .resumen-block { background-color: #f4f8fb; border-left: 4px solid #1973b8; padding: 15px 20px; margin-bottom: 25px; font-style: italic; color: #555; font-size: 14px; border-radius: 0 4px 4px 0; }
@@ -51,29 +58,31 @@ class AnalistaLegislativo:
                 
                 /* Badges */
                 .badges-row { margin-bottom: 10px; }
-                .badge { padding: 4px 8px; border-radius: 2px; font-size: 10px; font-weight: 700; text-transform: uppercase; display: inline-block; vertical-align: middle; margin-right: 6px; letter-spacing: 0.5px;}
+                .badge { padding: 5px 10px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; display: inline-block; vertical-align: middle; margin-right: 6px; letter-spacing: 0.5px;}
                 
                 /* Colores de Impacto BBVA Style */
                 .bg-alto { background-color: #da3851; color: white; } /* Rojo Alerta */
                 .bg-medio { background-color: #f8cd51; color: #121212; } /* Amarillo Core */
-                .bg-ref { background-color: #e9e9e9; color: #666; }
+                .bg-ref { background-color: #f2f2f2; color: #666; border: 1px solid #ddd; }
                 
                 /* Contenido Item */
-                .item-title { font-size: 16px; font-weight: 700; color: #121212; margin: 0 0 8px 0; line-height: 1.4; }
-                .justificacion { font-size: 14px; color: #444; margin-bottom: 15px; text-align: justify; line-height: 1.6; }
+                .item-title { font-size: 17px; font-weight: 700; color: #121212; margin: 0 0 8px 0; line-height: 1.4; }
+                .justificacion { font-size: 15px; color: #444; margin-bottom: 15px; text-align: justify; line-height: 1.6; }
                 
                 /* Botón */
-                .btn-link { display: inline-block; font-size: 11px; color: #004481; text-decoration: none; font-weight: 700; border: 1px solid #004481; padding: 8px 16px; border-radius: 2px; transition: background 0.2s; text-transform: uppercase; }
+                .btn-link { display: inline-block; font-size: 11px; color: #004481; text-decoration: none; font-weight: 700; border: 1px solid #004481; padding: 10px 18px; border-radius: 2px; transition: background 0.2s; text-transform: uppercase; }
                 .btn-link:hover { background-color: #004481; color: white; }
                 
                 /* Footer */
-                .footer { background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eaeaea; }
+                .footer { background-color: #f4f4f4; padding: 25px; text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eaeaea; }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/BBVA_2019_white.svg/2560px-BBVA_2019_white.svg.png" alt="BBVA" class="logo-img">
+                    <div class="logo-container">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/BBVA_2019_white.svg/600px-BBVA_2019_white.svg.png" alt="BBVA" class="logo-img">
+                    </div>
                     <h1>Reporte Regulatorio Diario</h1>
                     <h2>Sistema de Monitoreo de Asuntos Públicos</h2>
                 </div>
