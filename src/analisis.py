@@ -114,9 +114,7 @@ class AnalistaLegislativo:
         return html
 
     def analizar_proyectos(self, filas_nuevas):
-        # 1. SI NO HAY FILAS NUEVAS O NO HAY CLIENTE
         if not self.client or not filas_nuevas:
-            # AHORA RETORNA HTML BONITO EN LUGAR DE TEXTO PLANO
             return self._generar_html_vacio("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
 
         lista_proy_texto = []
@@ -144,6 +142,7 @@ class AnalistaLegislativo:
             }
             lista_proy_texto.append(str(item))
 
+        # --- AQUÍ ESTÁ TU PROMPT EXACTO ---
         prompt = f"""
         Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
         Analiza los siguientes items del Boletín Oficial y Congreso.
@@ -258,7 +257,7 @@ class AnalistaLegislativo:
                                 clase_badge = "bg-medio"
                                 if impacto == "ALTO": clase_badge = "bg-alto"
 
-                                html_output += f '''
+                                html_output += f"""
                                 <div class="item">
                                     <div class="badges-row">
                                         <span class="badge bg-ref">{ref}</span>
@@ -268,10 +267,9 @@ class AnalistaLegislativo:
                                     <div class="justificacion">{justificacion}</div>
                                     <a href="{link_web}" target="_blank" class="btn-link">Ver Texto Oficial &rarr;</a>
                                 </div>
-                                '''
+                                """
 
                     if not hay_contenido_relevante_total:
-                        # Si la IA corrió pero todo fue BAJO impacto, mostramos el empty state bonito
                         html_output += """
                         <div class="empty-state">
                             <span class="empty-icon">✅</span>
@@ -293,5 +291,4 @@ class AnalistaLegislativo:
                         print(f"❌ Error modelo: {e}")
                         break 
         
-        # Si falla todo, devolvemos HTML de error bonito
         return self._generar_html_vacio("Ocurrió un error al procesar el análisis con Inteligencia Artificial."), []
