@@ -1,111 +1,114 @@
-import cloudscraper
+import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
+import urllib3
 import time
-import json
-import re
+import random # Necesario para el "wait" variable
+
+# Desactivar advertencias de SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class ScrapearBoletin:
     def __init__(self):
-        self.base_url = "https://www.boletinoficial.gob.ar"
         self.api_url = "https://www.boletinoficial.gob.ar/v2/normas/secciones/primera"
         
-        # Cloudscraper crea un navegador falso que resuelve los desafíos JS/Cloudflare
-        self.scraper = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'desktop': True
-            }
-        )
+        # Headers "mágicos" para simular Chrome y evitar bloqueos
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': 'https://www.boletinoficial.gob.ar/seccion/primera',
+            'X-Requested-With': 'XMLHttpRequest', # CLAVE: Indica que es una petición interna de la web
+            'Connection': 'keep-alive'
+        }
+        self.session = requests.Session()
+        self.session.verify = False
 
     def obtener_texto_completo(self, id_aviso, fecha_norma):
-        # Intentamos acceder a la vista web directa
         url_detalle = f"https://www.boletinoficial.gob.ar/detalleAviso/primera/{id_aviso}/{fecha_norma}"
         try:
-            time.sleep(0.5) # Pausa para no ser agresivos
-            response = self.scraper.get(url_detalle, timeout=15)
+            # --- PAUSA DE SEGURIDAD (WAIT) ---
+            # Esperamos entre 0.5 y 1.5 segundos entre cada lectura de texto.
+            # Esto evita saturar el servidor y reduce riesgo de bloqueo.
+            time.sleep(random.uniform(0.5, 1.5))
+            
+            response = self.session.get(url_detalle, headers=self.headers, timeout=10)
             
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Buscamos el contenedor del texto
                 contenido = soup.find('div', {'id': 'avisodetalle'}) or soup.find('div', class_='detalle-aviso')
                 
                 if contenido:
                     texto = contenido.get_text(separator='\n', strip=True)
-                    # Limpieza básica
                     texto = texto.replace("Boletín Oficial de la República Argentina", "")
-                    texto = re.sub(r'Referencia:.*', '', texto) 
-                    return texto[:15000]
+                    return texto[:12000] # Limitamos caracteres para la IA
             return ""
-        except Exception as e:
-            print(f"      ⚠️ No se pudo leer texto de {id_aviso}: {e}")
+        except:
             return ""
 
     def scrape(self):
-        print(">>> Iniciando scraping Boletín Oficial (Modo Anti-Bloqueo)...")
+        print(">>> Iniciando scraping Boletín Oficial (Modo Lento y Seguro)...")
         
         try:
-            # 1. Definir fecha
-            # IMPORTANTE: Si estás en una PC real en 2025/2026, usa una fecha PASADA válida para probar.
-            # Si pones una fecha futura real, la API te dará lista vacía (pero no error 403).
-            # Para tu prueba del "escenario", usa la fecha que mencionaste antes:
-            fecha_target = "20260108" 
-            # SI ESTO DEVUELVE 0 RESULTADOS EN TU PC REAL, CAMBIA A UNA FECHA REAL DE AYER (ej: "20241020")
-            
-            print(f"   📡 Buscando normas para fecha: {fecha_target}...")
-            
-            # Parametros de la API
-            params = {'fecha': fecha_target}
-            
-            # Usamos el scraper en lugar de requests normal
-            response = self.scraper.get(self.api_url, params=params, timeout=15)
+            # 1. Visita previa a la home para cargar cookies (importante anti-bloqueo)
+            try:
+                self.session.get("https://www.boletinoficial.gob.ar/", headers=self.headers, timeout=10)
+            except:
+                pass # Si falla la home, intentamos seguir igual con la API
 
-            # Diagnóstico
+            # 2. Definir fecha
+            fecha_hoy = datetime.now().strftime("%Y%m%d")
+            # SI ESTÁS PROBANDO EL ESCENARIO DEL PDF, DESCOMENTA ESTO:
+            # fecha_hoy = "20260108" 
+            
+            params = {'fecha': fecha_hoy}
+            
+            print(f"   📡 Consultando API para: {fecha_hoy}...")
+            response = self.session.get(self.api_url, headers=self.headers, params=params, timeout=15)
+
             if response.status_code != 200:
-                print(f"❌ Error HTTP {response.status_code}")
-                # Si falla, imprimimos un trozo para ver qué devolvió
-                print(f"   Respuesta: {response.text[:100]}...")
+                print(f"⚠️ API Error {response.status_code}. Saltando.")
                 return pd.DataFrame()
 
             try:
                 data_json = response.json()
-            except json.JSONDecodeError:
-                print("❌ ERROR CRÍTICO: El sitio sigue devolviendo HTML.")
-                print("   Intenta: pip install --upgrade cloudscraper")
+            except:
+                print("⚠️ API devolvió HTML (Bloqueo). Saltando.")
                 return pd.DataFrame()
 
             lista_normas = data_json.get('data', [])
             
             if not lista_normas:
-                print(f"📭 La API respondió correctamente (JSON), pero no hay normas para el {fecha_target}.")
-                print("   (Esto es normal si estás consultando una fecha futura en el servidor real).")
+                print("📭 No hay normas hoy.")
                 return pd.DataFrame()
 
-            print(f"   ✅ ¡Conexión exitosa! Encontradas {len(lista_normas)} normas.")
+            print(f"   ✅ Encontradas {len(lista_normas)} normas. Descargando textos (tardará un poco)...")
+            
             datos_procesados = []
 
             for i, item in enumerate(lista_normas):
-                print(f"      Procesando {i+1}/{len(lista_normas)}...", end="\r")
-                
-                id_norma = item.get('idAviso')
                 titulo_corto = item.get('detalle', 'Sin título')
+                id_norma = item.get('idAviso')
                 organismo = item.get('organismo', 'Poder Ejecutivo')
                 
-                # Datos de referencia
-                numero = item.get('numeroNorma', 'S/N')
-                anio = item.get('anioNorma', '')
+                # Armar referencia
                 tipo = item.get('tipoNorma', '')
-                ref = f"{tipo} {numero}/{anio}"
-                link_web = f"https://www.boletinoficial.gob.ar/detalleAviso/primera/{id_norma}/{fecha_target}"
-
-                # 2. Descarga del texto completo con el mismo scraper
-                texto_full = self.obtener_texto_completo(id_norma, fecha_target)
+                numero = item.get('numeroNorma', '')
+                anio = item.get('anioNorma', '')
+                ref = f"{tipo} {numero}/{anio}".strip()
                 
-                # Armado del paquete para IA
-                contenido_ia = f"TITULO: {titulo_corto}\n\n--- TEXTO OFICIAL ---\n{texto_full}"
+                # Feedback visual de progreso
+                print(f"      [{i+1}/{len(lista_normas)}] Leyendo {ref}...", end="\r")
+
+                # Intentamos obtener el texto completo
+                texto_full = self.obtener_texto_completo(id_norma, fecha_hoy)
+                
+                if texto_full:
+                    contenido_ia = f"TITULO: {titulo_corto}\n\n--- TEXTO OFICIAL ---\n{texto_full}"
+                else:
+                    contenido_ia = f"TITULO: {titulo_corto}\n(Texto completo no disponible)"
+
+                link_web = f"https://www.boletinoficial.gob.ar/detalleAviso/primera/{id_norma}/{fecha_hoy}"
 
                 datos_procesados.append({
                     "ID": f"BO{id_norma}",
@@ -113,17 +116,16 @@ class ScrapearBoletin:
                     "Expediente": ref,
                     "Autor": organismo,
                     "Fecha de inicio": datetime.now().strftime("%d/%m/%Y"),
-                    "Proyecto": contenido_ia,
-                    "Comisiones": link_web,
-                    "Partido Político": "Oficialismo",
-                    "Provincia": "Nacional"
+                    "Proyecto": contenido_ia, # Texto completo para la IA
+                    "Comisiones": link_web,   # Link visible en Excel
+                    # ELIMINADOS: "Partido Político" y "Provincia"
                 })
 
-            print(f"\n   ✨ Éxito: {len(datos_procesados)} normas descargadas.")
+            print(f"\n   ✨ Finalizado: {len(datos_procesados)} normas procesadas.")
             return pd.DataFrame(datos_procesados)
 
         except Exception as e:
-            print(f"❌ Error inesperado: {e}")
+            print(f"❌ Error en BO: {e}")
             return pd.DataFrame()
 
 if __name__ == "__main__":
