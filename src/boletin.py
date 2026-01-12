@@ -123,8 +123,6 @@ class ScrapearBoletin:
                 id_aviso = item['id']
                 link_completo = self.base_url + item['href']
                 
-                print(f"      [{i+1}/{len(unique_norms)}] ID {id_aviso}...", end="\r")
-
                 info_detalle = self.procesar_detalle_completo(link_completo)
                 
                 titulo_final = item['titulo_listado'].replace("Ver", "").strip()
@@ -144,7 +142,7 @@ class ScrapearBoletin:
                     "Comisiones": link_completo
                 })
 
-            print(f"\n   ✨ {len(datos_procesados)} normas listas.")
+            print(f"\n   {len(datos_procesados)} normas listas.")
             return pd.DataFrame(datos_procesados)
 
         except Exception as e:
