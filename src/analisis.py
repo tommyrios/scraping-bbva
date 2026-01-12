@@ -48,41 +48,56 @@ class AnalistaLegislativo:
             }
             lista_proy_texto.append(str(item))
 
-        
         prompt = f"""
-        Actúa como Analista Regulatorio Senior para Banco BBVA.
-        Analiza las siguientes normas del Boletín Oficial. Tienes el texto completo.
+        Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
+        Analiza los siguientes items del Boletín Oficial y Congreso.
 
-        TU MISIÓN: Filtrar el ruido y destacar solo lo que impacta al negocio financiero/bancario/empresarial.
+        TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
 
-        CRITERIOS DE RELEVANCIA Y FILTRADO (ESTRICTO):
-        1. **DESCARTAR / IMPACTO BAJO**:
-           - Designaciones en áreas irrelevantes para un banco (Ej: Guardaparques, Cultura, Educación, Militar, Diplocacia de bajo nivel).
-           - Homologaciones de convenios colectivos de industrias ajenas (Ej: Pasteleros, Vidrio, Madera), salvo que marquen una pauta salarial general muy relevante.
-           - Premios, becas, declaraciones de interés cultural.
-           - Multas a particulares desconocidos (contrabando menor).
+        Instrucciones para la redacción de campos:
+        1. "titulo_descriptivo":
+           - Titular periodístico breve.
+           - Si es DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]".
+           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL] (ej: Tarifas, Impuestos)".
+           - Elimina códigos burocráticos (ej: 'RESOL-2026...').
 
-        2. **PRIORIDAD / IMPACTO ALTO o MEDIO**:
-           - Todo lo emanado por: BCRA, CNV, UIF, AFIP (ARCA), Secretaría de Comercio, Ministerio de Economía.
-           - Normas sobre: Tasas de interés, Deuda Pública (Letras, Bonos), Tipo de Cambio, Impuestos, Lavado de Dinero (PLA/FT), Seguridad Informática.
-           - Designaciones CLAVE: Directorio BCRA, Ministro de Economía, Jefatura de Gabinete.
+        2. "justificacion" (El análisis):
+           - ESTILO: Sintético pero rico en datos (2 líneas máximo).
+           - PARA DESIGNACIONES: DEBES mencionar explícitamente el NOMBRE COMPLETO y el CARGO EXACTO. (Ej: "Designa a Luis Fontana como titular de ANMAT en reemplazo de Nélida Bisio").
+           - PARA NORMATIVAS: Explica QUÉ se establece (montos, plazos, tasas, leyes que se modifican). NO digas "tiene impacto sectorial", di POR QUÉ (ej: "Fija precio de energía en 28 USD/MWh" o "Modifica alícuota de impuesto PAIS").
 
-        FORMATO DE SALIDA (JSON):
+        Devuelve un JSON con esta estructura exacta:
         {{
             "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas enfocado en impacto bancario/económico.",
-                "items": [
-                    {{
-                        "id_interno": "...",
-                        "referencia": "...", (Ej: Resolución 10/2026)
-                        "titulo_descriptivo": "...", (Titulo periodístico serio)
-                        "impacto": "ALTO", "MEDIO" o "BAJO",
-                        "justificacion": "..."
-                    }}
+                "resumen": "Resumen ejecutivo de 3 líneas con lo más destacado del día.",
+                "items": [ 
+                    {{ 
+                        "id_interno": "...", 
+                        "referencia": "...", 
+                        "titulo_descriptivo": "...",
+                        "impacto": "...", 
+                        "justificacion": "..." 
+                    }} 
                 ]
             }},
-            ... (diputados/senado igual) ...
+            "diputados": {{
+                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
+                "items": []
+            }},
+            "senado": {{
+                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
+                "items": []
+            }}
         }}
+
+        CRITERIOS DE IMPACTO:
+        - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral). Todo lo emanado por: BCRA, CNV, UIF, AFIP (ARCA), Secretaría de Comercio, Ministerio de Economía. 
+        Normas sobre: Tasas de interés, Deuda Pública (Letras, Bonos), Tipo de Cambio, Impuestos, Lavado de Dinero (PLA/FT), Seguridad Informática. Designaciones CLAVE: Directorio BCRA, Ministro de Economía, Jefatura de Gabinete. 
+        
+        - MEDIO: Designaciones de funcionarios (Secretarios, Directores, Embajadores) y normas sectoriales específicas. 
+       
+        - BAJO: Temas de interés general, declaraciones de interés o efemérides. Homologaciones de convenios colectivos de industrias ajenas (Ej: Pasteleros, Vidrio, Madera), salvo que marquen una pauta salarial general muy relevante.
+        Premios, becas, declaraciones de interés cultural. Multas a particulares desconocidos (contrabando menor).
 
         Datos a analizar:
         {json.dumps(lista_proy_texto, ensure_ascii=False)}
