@@ -154,7 +154,7 @@ if __name__ == "__main__":
         batch_bo = []
         
         reporte = ""
-
+'''
         # --- DIPUTADOS ---
         print(">>> Diputados...")
         try:
@@ -172,7 +172,8 @@ if __name__ == "__main__":
             st = procesar_lote(df, gestor_proy, "Senado", batch_proy, filas_ia_globales)
             reporte += f"🏛️ *Senado:* {st['nuevos']} nuevos\n"
         except Exception as e: print(e); reporte += f"Senado Error: {e}\n"
-
+        
+'''
         # --- BOLETIN ---
         print(">>> Boletín...")
         try:
