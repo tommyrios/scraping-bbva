@@ -23,7 +23,7 @@ class GestorEstado:
         idx_expediente = 1 if prefijo_id == "BO" else 2
 
         for i, row in enumerate(raw_data):
-            if i == 0: continue # Header
+            if i == 0: continue 
             if len(row) < 2: continue
             
             id_val = str(row[0]).strip()
@@ -133,7 +133,7 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
     return stats
 
 if __name__ == "__main__":
-    print("--- Sistema Unificado v2.0 (Stateful) ---")
+    print("--- Sistema Unificado v2.0 (COMPLETO) ---")
     sender = MensajeSender()
     
     try:
@@ -153,7 +153,7 @@ if __name__ == "__main__":
         batch_proy = []
         batch_bo = []
         
-        reporte = ""
+        reporte = "" 
 
         # --- DIPUTADOS ---
         print(">>> Diputados...")
@@ -161,8 +161,9 @@ if __name__ == "__main__":
             df = ScrapearDiputados().scrape("https://www.diputados.gov.ar/proyectos/")
             if df is not None and not df.empty: df = df.iloc[::-1]
             st = procesar_lote(df, gestor_proy, "Diputados", batch_proy, filas_ia_globales)
-            reporte += f"🏛️ *Diputados:* {st['nuevos']} nuevos\n"
-        except Exception as e: print(e); reporte += f"Diputados Error: {e}\n"
+            print(f"   Resultados: {st['nuevos']} nuevos")
+        except Exception as e: 
+            print(f"❌ Error Diputados: {e}")
 
         # --- SENADO ---
         print(">>> Senado...")
@@ -170,29 +171,30 @@ if __name__ == "__main__":
             df = ScrapearSenado().scrape()
             if df is not None and not df.empty: df = df.iloc[::-1]
             st = procesar_lote(df, gestor_proy, "Senado", batch_proy, filas_ia_globales)
-            reporte += f"🏛️ *Senado:* {st['nuevos']} nuevos\n"
-        except Exception as e: print(e); reporte += f"Senado Error: {e}\n"
-
+            print(f"   Resultados: {st['nuevos']} nuevos")
+        except Exception as e: 
+            print(f"❌ Error Senado: {e}")
+        
         # --- BOLETIN ---
         print(">>> Boletín...")
         try:
             df = ScrapearBoletin().scrape()
             st = procesar_lote(df, gestor_bo, "Boletin Oficial", batch_bo, filas_ia_globales)
-            reporte += f"📜 *Boletín:* {st['nuevos']} normas\n"
-        except Exception as e: print(e); reporte += f"Boletín Error: {e}\n"
+            print(f"   Resultados: {st['nuevos']} normas")
+        except Exception as e: 
+            print(f"❌ Error Boletín: {e}")
 
         if batch_proy: sheet_proy.batch_update(batch_proy, value_input_option='USER_ENTERED')
         if batch_bo: sheet_bo.batch_update(batch_bo, value_input_option='USER_ENTERED')
 
-        reporte += "\n----------------------------------------\n"
-
         print(">>> Analizando IA...")
         analista = AnalistaLegislativo()
         datos_limpios = [f[:-1] for f in filas_ia_globales]
+        
         texto_analisis, resultados_ia = analista.analizar_proyectos(datos_limpios)
 
         if resultados_ia:
-            print(">>> Guardando IA...")
+            print(">>> Guardando resultados IA en Excel...")
             updates_proy_ia = []
             updates_bo_ia = []
             
@@ -216,10 +218,10 @@ if __name__ == "__main__":
             if updates_bo_ia: sheet_bo.batch_update(updates_bo_ia, value_input_option='USER_ENTERED')
 
         print(">>> Enviando mail...")
-        sender.enviar_difusion(f"{reporte}\n{texto_analisis}")
+        sender.enviar_difusion(texto_analisis)
         print("✅ Éxito total.")
 
     except Exception as e:
         print(f"❌ FATAL: {e}")
-        sender.enviar_difusion(f"Error Crítico: {e}")
+        sender.enviar_difusion(f"<html><body><h1>Error Crítico en Ejecución</h1><p>{e}</p></body></html>")
         exit(1)
