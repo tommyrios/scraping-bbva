@@ -133,7 +133,7 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
     return stats
 
 if __name__ == "__main__":
-    print("--- Sistema Unificado v2.0 (Stateful) ---")
+    print("--- Sistema Unificado v2.0 (TEST SOLO BOLETIN) ---")
     sender = MensajeSender()
     
     try:
@@ -153,27 +153,26 @@ if __name__ == "__main__":
         batch_proy = []
         batch_bo = []
         
-        reporte = ""
-'''
-        # --- DIPUTADOS ---
-        print(">>> Diputados...")
-        try:
-            df = ScrapearDiputados().scrape("https://www.diputados.gov.ar/proyectos/")
-            if df is not None and not df.empty: df = df.iloc[::-1]
-            st = procesar_lote(df, gestor_proy, "Diputados", batch_proy, filas_ia_globales)
-            reporte += f"🏛️ *Diputados:* {st['nuevos']} nuevos\n"
-        except Exception as e: print(e); reporte += f"Diputados Error: {e}\n"
+        reporte = "⚠️ *REPORTE TEST (SOLO BOLETÍN)*\n"
 
-        # --- SENADO ---
-        print(">>> Senado...")
-        try:
-            df = ScrapearSenado().scrape()
-            if df is not None and not df.empty: df = df.iloc[::-1]
-            st = procesar_lote(df, gestor_proy, "Senado", batch_proy, filas_ia_globales)
-            reporte += f"🏛️ *Senado:* {st['nuevos']} nuevos\n"
-        except Exception as e: print(e); reporte += f"Senado Error: {e}\n"
+        # --- DIPUTADOS (COMENTADO) ---
+        # print(">>> Diputados...")
+        # try:
+        #     df = ScrapearDiputados().scrape("https://www.diputados.gov.ar/proyectos/")
+        #     if df is not None and not df.empty: df = df.iloc[::-1]
+        #     st = procesar_lote(df, gestor_proy, "Diputados", batch_proy, filas_ia_globales)
+        #     reporte += f"🏛️ *Diputados:* {st['nuevos']} nuevos\n"
+        # except Exception as e: print(e); reporte += f"Diputados Error: {e}\n"
+
+        # --- SENADO (COMENTADO) ---
+        # print(">>> Senado...")
+        # try:
+        #     df = ScrapearSenado().scrape()
+        #     if df is not None and not df.empty: df = df.iloc[::-1]
+        #     st = procesar_lote(df, gestor_proy, "Senado", batch_proy, filas_ia_globales)
+        #     reporte += f"🏛️ *Senado:* {st['nuevos']} nuevos\n"
+        # except Exception as e: print(e); reporte += f"Senado Error: {e}\n"
         
-'''
         # --- BOLETIN ---
         print(">>> Boletín...")
         try:
