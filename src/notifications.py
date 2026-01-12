@@ -7,7 +7,7 @@ class MensajeSender:
     def __init__(self):
         # Intenta leer las variables del entorno
         self.email_user = os.environ.get("EMAIL_USER")
-        self.email_pass = os.environ.get("EMAIL_PASS")
+        self.email_pass = os.environ.get("EMAIL_PASSWORD")
         
         # Lee destinatarios (separados por coma si hay varios)
         destinatarios_str = os.environ.get("EMAIL_TO", "")
