@@ -18,69 +18,73 @@ class AnalistaLegislativo:
         return ""
 
     def _generar_html_header(self):
-        """Genera el encabezado HTML con Logo izquierda y Título centrado."""
-        return """
+        """Genera el encabezado HTML con Logo BBVA propio (GitHub Raw)."""
+        
+        # Enlace directo a tu imagen en RAW
+        LOGO_URL = "https://raw.githubusercontent.com/tommyrios/scraping-bbva/main/src/assets/BBVA_WHITE.png"
+        
+        return f'''
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
             <style>
                 /* Reset y Fuente */
-                body { 
+                body {{ 
                     font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif; 
                     color: #333; 
                     line-height: 1.6; 
                     background-color: #ffffff; 
                     margin: 0; 
                     padding: 0; 
-                }
+                }}
                 
-                .container { 
+                .container {{ 
                     width: 100%; 
                     max-width: 100%; 
                     margin: 0; 
                     background: #fff; 
-                }
+                }}
                 
                 /* --- HEADER CONFIG --- */
-                .header { 
+                .header {{ 
                     background-color: #072146; /* Azul BBVA */
                     color: white; 
                     padding: 30px 5%; 
-                }
+                }}
                 
                 /* Fila del Logo: Alineada a la Izquierda */
-                .logo-row {
+                .logo-row {{
                     text-align: left;
-                    margin-bottom: 15px;
+                    margin-bottom: 20px;
                     width: 100%;
-                }
+                }}
                 
                 /* Imagen del Logo */
-                .logo-img { 
-                    height: 28px; /* Tamaño discreto y elegante */
+                .logo-img {{ 
+                    height: 30px; /* Tamaño ajustado */
                     width: auto; 
-                    display: block; /* Importante para evitar espacios fantasma */
+                    display: block; 
                     border: 0;
                     outline: none;
                     text-decoration: none;
-                }
+                }}
 
                 /* Fila del Título: Centrada */
-                .title-row {
+                .title-row {{
                     text-align: center;
                     width: 100%;
-                }
+                }}
                 
-                .header h1 { 
+                .header h1 {{ 
                     margin: 0; 
                     font-size: 26px; 
                     font-weight: 500; 
                     letter-spacing: 0.5px; 
                     color: #ffffff; 
-                }
+                }}
                 
-                .header h2 { 
+                .header h2 {{ 
                     margin: 8px 0 0; 
                     font-size: 13px; 
                     opacity: 0.8; 
@@ -88,15 +92,15 @@ class AnalistaLegislativo:
                     text-transform: uppercase; 
                     letter-spacing: 2px; 
                     color: #a4c4e0; 
-                }
+                }}
                 
                 /* --- CONTENIDO --- */
-                .content { 
+                .content {{ 
                     padding: 40px 5%; 
                     background-color: #ffffff; 
-                }
+                }}
                 
-                .section-title { 
+                .section-title {{ 
                     color: #072146; 
                     border-bottom: 3px solid #072146; 
                     padding-bottom: 10px; 
@@ -105,9 +109,9 @@ class AnalistaLegislativo:
                     font-size: 18px; 
                     font-weight: 700; 
                     text-transform: uppercase; 
-                }
+                }}
                 
-                .resumen-block { 
+                .resumen-block {{ 
                     background-color: #f4f8fb; 
                     border-left: 5px solid #1973b8; 
                     padding: 20px; 
@@ -115,18 +119,18 @@ class AnalistaLegislativo:
                     font-style: italic; 
                     color: #444; 
                     font-size: 15px; 
-                }
+                }}
                 
                 /* Items */
-                .item { 
+                .item {{ 
                     margin-bottom: 35px; 
                     padding-bottom: 25px; 
                     border-bottom: 1px solid #eeeeee; 
-                }
-                .item:last-child { border-bottom: none; }
+                }}
+                .item:last-child {{ border-bottom: none; }}
                 
-                .badges-row { margin-bottom: 12px; }
-                .badge { 
+                .badges-row {{ margin-bottom: 12px; }}
+                .badge {{ 
                     padding: 6px 12px; 
                     border-radius: 4px; 
                     font-size: 11px; 
@@ -135,28 +139,28 @@ class AnalistaLegislativo:
                     display: inline-block; 
                     vertical-align: middle; 
                     margin-right: 8px; 
-                }
+                }}
                 
-                .bg-alto { background-color: #da3851; color: white; }
-                .bg-medio { background-color: #f8cd51; color: #121212; }
-                .bg-ref { background-color: #f2f2f2; color: #555; border: 1px solid #ddd; }
+                .bg-alto {{ background-color: #da3851; color: white; }}
+                .bg-medio {{ background-color: #f8cd51; color: #121212; }}
+                .bg-ref {{ background-color: #f2f2f2; color: #555; border: 1px solid #ddd; }}
                 
-                .item-title { 
+                .item-title {{ 
                     font-size: 18px; 
                     font-weight: 700; 
                     color: #121212; 
                     margin: 0 0 10px 0; 
                     line-height: 1.4; 
-                }
-                .justificacion { 
+                }}
+                .justificacion {{ 
                     font-size: 15px; 
                     color: #444; 
                     margin-bottom: 15px; 
                     text-align: left; 
                     line-height: 1.6; 
-                }
+                }}
                 
-                .btn-link { 
+                .btn-link {{ 
                     display: inline-block; 
                     font-size: 12px; 
                     color: #004481; 
@@ -167,34 +171,31 @@ class AnalistaLegislativo:
                     border-radius: 4px; 
                     transition: background 0.2s; 
                     text-transform: uppercase; 
-                }
-                .btn-link:hover { 
+                }}
+                .btn-link:hover {{ 
                     background-color: #004481; 
                     color: white; 
-                }
+                }}
                 
-                .empty-state { text-align: center; padding: 40px 0; color: #666; }
-                .empty-icon { font-size: 40px; margin-bottom: 15px; display: block; opacity: 0.5; }
+                .empty-state {{ text-align: center; padding: 40px 0; color: #666; }}
+                .empty-icon {{ font-size: 40px; margin-bottom: 15px; display: block; opacity: 0.5; }}
                 
-                .footer { 
+                .footer {{ 
                     background-color: #f9f9f9; 
                     padding: 30px 5%; 
                     text-align: center; 
                     font-size: 12px; 
                     color: #999; 
                     border-top: 1px solid #eaeaea; 
-                }
+                }}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
                     <div class="logo-row">
-                        <img src="https://logodownload.org/wp-content/uploads/2014/05/bbva-logo-1.png" 
-                             alt="BBVA" 
-                             class="logo-img"
-                             style="filter: brightness(0) invert(1);"> 
-                             </div>
+                        <img src="{LOGO_URL}" alt="BBVA" class="logo-img">
+                    </div>
                     
                     <div class="title-row">
                         <h1>Reporte Regulatorio Diario</h1>
@@ -202,7 +203,7 @@ class AnalistaLegislativo:
                     </div>
                 </div>
                 <div class="content">
-        """
+        '''
 
     def _generar_html_footer(self):
         return """
