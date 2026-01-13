@@ -18,73 +18,188 @@ class AnalistaLegislativo:
         return ""
 
     def _generar_html_header(self):
-        """Genera el encabezado HTML con Logo BBVA optimizado y estilos."""
+        """Genera el encabezado HTML con Logo izquierda y Título centrado."""
         return """
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
             <style>
-                body { font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; background-color: #f4f4f4; margin: 0; padding: 0; }
-                .container { max-width: 700px; margin: 20px auto; background: #fff; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-                
-                /* Header Corporativo BBVA */
-                .header { background-color: #072146; color: white; padding: 35px 20px; text-align: center; }
-                
-                .logo-container { margin-bottom: 20px; text-align: center; }
-                
-                /* Logo optimizado */
-                .logo-img { 
-                    height: 35px; 
-                    width: auto; 
-                    display: inline-block;
+                /* Reset y Fuente */
+                body { 
+                    font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif; 
+                    color: #333; 
+                    line-height: 1.6; 
+                    background-color: #ffffff; 
+                    margin: 0; 
+                    padding: 0; 
                 }
                 
-                .header h1 { margin: 0; font-size: 24px; font-weight: 500; letter-spacing: 0.5px; color: #ffffff; }
-                .header h2 { margin: 8px 0 0; font-size: 14px; opacity: 0.9; font-weight: 300; text-transform: uppercase; letter-spacing: 2px; color: #a4c4e0; }
+                .container { 
+                    width: 100%; 
+                    max-width: 100%; 
+                    margin: 0; 
+                    background: #fff; 
+                }
                 
-                .content { padding: 40px 30px; background-color: #ffffff; min-height: 200px; }
+                /* --- HEADER CONFIG --- */
+                .header { 
+                    background-color: #072146; /* Azul BBVA */
+                    color: white; 
+                    padding: 30px 5%; 
+                }
                 
-                /* Secciones */
-                .section-title { color: #072146; border-bottom: 2px solid #004481; padding-bottom: 8px; margin-top: 30px; margin-bottom: 20px; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+                /* Fila del Logo: Alineada a la Izquierda */
+                .logo-row {
+                    text-align: left;
+                    margin-bottom: 15px;
+                    width: 100%;
+                }
                 
-                /* Resumen */
-                .resumen-block { background-color: #f4f8fb; border-left: 4px solid #1973b8; padding: 15px 20px; margin-bottom: 25px; font-style: italic; color: #555; font-size: 14px; border-radius: 0 4px 4px 0; }
+                /* Imagen del Logo */
+                .logo-img { 
+                    height: 28px; /* Tamaño discreto y elegante */
+                    width: auto; 
+                    display: block; /* Importante para evitar espacios fantasma */
+                    border: 0;
+                    outline: none;
+                    text-decoration: none;
+                }
+
+                /* Fila del Título: Centrada */
+                .title-row {
+                    text-align: center;
+                    width: 100%;
+                }
+                
+                .header h1 { 
+                    margin: 0; 
+                    font-size: 26px; 
+                    font-weight: 500; 
+                    letter-spacing: 0.5px; 
+                    color: #ffffff; 
+                }
+                
+                .header h2 { 
+                    margin: 8px 0 0; 
+                    font-size: 13px; 
+                    opacity: 0.8; 
+                    font-weight: 400; 
+                    text-transform: uppercase; 
+                    letter-spacing: 2px; 
+                    color: #a4c4e0; 
+                }
+                
+                /* --- CONTENIDO --- */
+                .content { 
+                    padding: 40px 5%; 
+                    background-color: #ffffff; 
+                }
+                
+                .section-title { 
+                    color: #072146; 
+                    border-bottom: 3px solid #072146; 
+                    padding-bottom: 10px; 
+                    margin-top: 40px; 
+                    margin-bottom: 25px; 
+                    font-size: 18px; 
+                    font-weight: 700; 
+                    text-transform: uppercase; 
+                }
+                
+                .resumen-block { 
+                    background-color: #f4f8fb; 
+                    border-left: 5px solid #1973b8; 
+                    padding: 20px; 
+                    margin-bottom: 30px; 
+                    font-style: italic; 
+                    color: #444; 
+                    font-size: 15px; 
+                }
                 
                 /* Items */
-                .item { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eeeeee; }
+                .item { 
+                    margin-bottom: 35px; 
+                    padding-bottom: 25px; 
+                    border-bottom: 1px solid #eeeeee; 
+                }
                 .item:last-child { border-bottom: none; }
                 
-                /* Badges */
-                .badges-row { margin-bottom: 10px; }
-                .badge { padding: 5px 10px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; display: inline-block; vertical-align: middle; margin-right: 6px; letter-spacing: 0.5px;}
+                .badges-row { margin-bottom: 12px; }
+                .badge { 
+                    padding: 6px 12px; 
+                    border-radius: 4px; 
+                    font-size: 11px; 
+                    font-weight: 700; 
+                    text-transform: uppercase; 
+                    display: inline-block; 
+                    vertical-align: middle; 
+                    margin-right: 8px; 
+                }
                 
                 .bg-alto { background-color: #da3851; color: white; }
                 .bg-medio { background-color: #f8cd51; color: #121212; }
-                .bg-ref { background-color: #f2f2f2; color: #666; border: 1px solid #ddd; }
+                .bg-ref { background-color: #f2f2f2; color: #555; border: 1px solid #ddd; }
                 
-                .item-title { font-size: 17px; font-weight: 700; color: #121212; margin: 0 0 8px 0; line-height: 1.4; }
-                .justificacion { font-size: 15px; color: #444; margin-bottom: 15px; text-align: justify; line-height: 1.6; }
+                .item-title { 
+                    font-size: 18px; 
+                    font-weight: 700; 
+                    color: #121212; 
+                    margin: 0 0 10px 0; 
+                    line-height: 1.4; 
+                }
+                .justificacion { 
+                    font-size: 15px; 
+                    color: #444; 
+                    margin-bottom: 15px; 
+                    text-align: left; 
+                    line-height: 1.6; 
+                }
                 
-                .btn-link { display: inline-block; font-size: 11px; color: #004481; text-decoration: none; font-weight: 700; border: 1px solid #004481; padding: 10px 18px; border-radius: 2px; transition: background 0.2s; text-transform: uppercase; }
-                .btn-link:hover { background-color: #004481; color: white; }
+                .btn-link { 
+                    display: inline-block; 
+                    font-size: 12px; 
+                    color: #004481; 
+                    text-decoration: none; 
+                    font-weight: 700; 
+                    border: 2px solid #004481; 
+                    padding: 10px 20px; 
+                    border-radius: 4px; 
+                    transition: background 0.2s; 
+                    text-transform: uppercase; 
+                }
+                .btn-link:hover { 
+                    background-color: #004481; 
+                    color: white; 
+                }
                 
-                /* Mensaje Sin Novedades */
-                .empty-state { text-align: center; padding: 40px 20px; color: #666; }
+                .empty-state { text-align: center; padding: 40px 0; color: #666; }
                 .empty-icon { font-size: 40px; margin-bottom: 15px; display: block; opacity: 0.5; }
                 
-                /* Footer */
-                .footer { background-color: #f4f4f4; padding: 25px; text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eaeaea; }
+                .footer { 
+                    background-color: #f9f9f9; 
+                    padding: 30px 5%; 
+                    text-align: center; 
+                    font-size: 12px; 
+                    color: #999; 
+                    border-top: 1px solid #eaeaea; 
+                }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <div class="logo-container">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/BBVA_2019_white.svg/600px-BBVA_2019_white.svg.png" alt="BBVA" class="logo-img">
+                    <div class="logo-row">
+                        <img src="https://logodownload.org/wp-content/uploads/2014/05/bbva-logo-1.png" 
+                             alt="BBVA" 
+                             class="logo-img"
+                             style="filter: brightness(0) invert(1);"> 
+                             </div>
+                    
+                    <div class="title-row">
+                        <h1>Reporte Regulatorio Diario</h1>
+                        <h2>Sistema de Monitoreo de Asuntos Públicos</h2>
                     </div>
-                    <h1>Reporte Regulatorio Diario</h1>
-                    <h2>Sistema de Monitoreo de Asuntos Públicos</h2>
                 </div>
                 <div class="content">
         """
