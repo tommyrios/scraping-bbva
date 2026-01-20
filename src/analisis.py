@@ -14,14 +14,15 @@ class AnalistaLegislativo:
         if "Diputados" in origen:
             return f"https://www.google.com/search?q=site:diputados.gov.ar+%22{exp}%22"
         elif "Senado" in origen:
-            return f"https://www.senado.gob.ar/parlamentario/comisiones/verExp/{exp}"
+            # El endpoint verExp no siempre coincide con el formato del expediente.
+            # Para máxima robustez, usamos búsqueda por sitio.
+            return f"https://www.google.com/search?q=site:senado.gob.ar+%22{exp}%22"
         return ""
 
     def _generar_html_header(self):
         """Genera el encabezado HTML con Logo BBVA propio (GitHub Raw)."""
-        
-        # Enlace directo a tu imagen en RAW
-        LOGO_URL = "https://raw.githubusercontent.com/tommyrios/scraping-bbva/main/src/assets/BBVA_WHITE.png"
+        # Logo embebido (CID) para evitar "imagen rota" por bloqueo de imágenes remotas.
+        LOGO_URL = "cid:bbva_logo"
         
         return f'''
         <!DOCTYPE html>
@@ -233,30 +234,53 @@ class AnalistaLegislativo:
         if not self.client or not filas_nuevas:
             return self._generar_html_vacio("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
 
-        lista_proy_texto = []
-        meta_data_por_id = {} 
+        # --- Construcción de payload determinístico por origen ---
+        items_para_modelo = []
+        meta_data_por_id = {}
+        seccion_esperada_por_id = {}
+
+        def _seccion_esperada(origen_txt: str) -> str:
+            o = (origen_txt or "").lower()
+            if "boletin" in o:
+                return "boletin"
+            if "senado" in o:
+                return "senado"
+            return "diputados"
 
         for fila in filas_nuevas:
-            id_interno = fila[0]
-            origen = fila[1]
-            expediente = fila[2]
-            contenido_completo = fila[5] 
-            
-            if "Boletin" in origen:
-                link = fila[6]
+            id_interno = str(fila[0]).strip()
+            origen = str(fila[1]).strip()
+            expediente = str(fila[2]).strip()
+            contenido_completo = str(fila[5])
+
+            seccion = _seccion_esperada(origen)
+            seccion_esperada_por_id[id_interno] = seccion
+
+            if seccion == "boletin":
+                link = str(fila[6])
             else:
                 link = self.generar_link(origen, expediente)
-            
-            titulo_simple = contenido_completo.split('\n')[0].replace("TITULO: ", "").replace("NORMA: ", "")
-            meta_data_por_id[id_interno] = {"titulo": titulo_simple, "link": link, "origen": origen}
-            
-            item = {
-                "id_interno": id_interno, 
-                "referencia": expediente,
-                "descripcion": contenido_completo, 
-                "fuente": origen
+
+            titulo_simple = (contenido_completo.split('\n')[0]
+                            .replace("TITULO: ", "")
+                            .replace("NORMA: ", "")
+                            .strip())
+
+            meta_data_por_id[id_interno] = {
+                "titulo": titulo_simple,
+                "link": link,
+                "origen": origen,
+                "seccion": seccion,
+                "referencia": expediente
             }
-            lista_proy_texto.append(str(item))
+
+            items_para_modelo.append({
+                "id_interno": id_interno,
+                "referencia": expediente,
+                "descripcion": contenido_completo,
+                "fuente": origen,
+                "seccion_esperada": seccion
+            })
 
         # --- AQUÍ ESTÁ TU PROMPT EXACTO ---
         prompt = f"""
@@ -301,6 +325,10 @@ class AnalistaLegislativo:
             }}
         }}
 
+        REGLA DE CLASIFICACIÓN (OBLIGATORIA):
+        - Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
+        - Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
+
         CRITERIOS DE IMPACTO:
         - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral). Todo lo emanado por: BCRA, CNV, UIF, AFIP (ARCA), Secretaría de Comercio, Ministerio de Economía. 
         Normas sobre: Tasas de interés, Deuda Pública (Letras, Bonos), Tipo de Cambio, Impuestos, Lavado de Dinero (PLA/FT), Seguridad Informática. Designaciones CLAVE: Directorio BCRA, Ministro de Economía, Jefatura de Gabinete. 
@@ -311,9 +339,143 @@ class AnalistaLegislativo:
         Premios, becas, declaraciones de interés cultural. Multas a particulares desconocidos (contrabando menor).
 
         Datos a analizar:
-        {json.dumps(lista_proy_texto, ensure_ascii=False)}
+        {json.dumps(items_para_modelo, ensure_ascii=False)}
+        """
+    def _generar_html_footer(self):
+        return """
+                </div>
+                <div class="footer">
+                    &copy; 2026 BBVA Argentina • Generado por Inteligencia Artificial (Gemini)
+                </div>
+            </div>
+        </body>
+        </html>
         """
 
+    def _generar_html_vacio(self, mensaje="Sin novedades relevantes en esta ejecución."):
+        """Helper para generar reporte vacío pero con Branding."""
+        html = self._generar_html_header()
+        html += f"""
+            <div class="empty-state">
+                <span class="empty-icon">✅</span>
+                <h3>Sin Novedades</h3>
+                <p>{mensaje}</p>
+            </div>
+        """
+        html += self._generar_html_footer()
+        return html
+
+    def analizar_proyectos(self, filas_nuevas):
+        if not self.client or not filas_nuevas:
+            return self._generar_html_vacio("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
+
+        # --- Construcción de payload determinístico por origen ---
+        items_para_modelo = []
+        meta_data_por_id = {}
+        seccion_esperada_por_id = {}
+
+        def _seccion_esperada(origen_txt: str) -> str:
+            o = (origen_txt or "").lower()
+            if "boletin" in o:
+                return "boletin"
+            if "senado" in o:
+                return "senado"
+            return "diputados"
+
+        for fila in filas_nuevas:
+            id_interno = str(fila[0]).strip()
+            origen = str(fila[1]).strip()
+            expediente = str(fila[2]).strip()
+            contenido_completo = str(fila[5])
+
+            seccion = _seccion_esperada(origen)
+            seccion_esperada_por_id[id_interno] = seccion
+
+            if seccion == "boletin":
+                link = str(fila[6])
+            else:
+                link = self.generar_link(origen, expediente)
+
+            titulo_simple = (contenido_completo.split('\n')[0]
+                            .replace("TITULO: ", "")
+                            .replace("NORMA: ", "")
+                            .strip())
+
+            meta_data_por_id[id_interno] = {
+                "titulo": titulo_simple,
+                "link": link,
+                "origen": origen,
+                "seccion": seccion,
+                "referencia": expediente
+            }
+
+            items_para_modelo.append({
+                "id_interno": id_interno,
+                "referencia": expediente,
+                "descripcion": contenido_completo,
+                "fuente": origen,
+                "seccion_esperada": seccion
+            })
+
+        # --- AQUÍ ESTÁ TU PROMPT EXACTO ---
+        prompt = f"""
+        Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
+        Analiza los siguientes items del Boletín Oficial y Congreso.
+
+        TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
+
+        Instrucciones para la redacción de campos:
+        1. "titulo_descriptivo":
+           - Titular periodístico breve.
+           - Si es DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]".
+           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL] (ej: Tarifas, Impuestos)".
+           - Elimina códigos burocráticos (ej: 'RESOL-2026...').
+
+        2. "justificacion" (El análisis):
+           - ESTILO: Sintético pero rico en datos (2 líneas máximo).
+           - PARA DESIGNACIONES: DEBES mencionar explícitamente el NOMBRE COMPLETO y el CARGO EXACTO. (Ej: "Designa a Luis Fontana como titular de ANMAT en reemplazo de Nélida Bisio").
+           - PARA NORMATIVAS: Explica QUÉ se establece (montos, plazos, tasas, leyes que se modifican). NO digas "tiene impacto sectorial", di POR QUÉ (ej: "Fija precio de energía en 28 USD/MWh" o "Modifica alícuota de impuesto PAIS").
+
+        Devuelve un JSON con esta estructura exacta:
+        {{
+            "boletin": {{
+                "resumen": "Resumen ejecutivo de 3 líneas con lo más destacado del día.",
+                "items": [ 
+                    {{ 
+                        "id_interno": "...", 
+                        "referencia": "...", 
+                        "titulo_descriptivo": "...",
+                        "impacto": "...", 
+                        "justificacion": "..." 
+                    }} 
+                ]
+            }},
+            "diputados": {{
+                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
+                "items": []
+            }},
+            "senado": {{
+                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
+                "items": []
+            }}
+        }}
+
+        REGLA DE CLASIFICACIÓN (OBLIGATORIA):
+        - Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
+        - Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
+
+        CRITERIOS DE IMPACTO:
+        - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral). Todo lo emanado por: BCRA, CNV, UIF, AFIP (ARCA), Secretaría de Comercio, Ministerio de Economía. 
+        Normas sobre: Tasas de interés, Deuda Pública (Letras, Bonos), Tipo de Cambio, Impuestos, Lavado de Dinero (PLA/FT), Seguridad Informática. Designaciones CLAVE: Directorio BCRA, Ministro de Economía, Jefatura de Gabinete. 
+        
+        - MEDIO: Designaciones de funcionarios (Secretarios, Directores, Embajadores) y normas sectoriales específicas. 
+       
+        - BAJO: Temas de interés general, declaraciones de interés o efemérides. Homologaciones de convenios colectivos de industrias ajenas (Ej: Pasteleros, Vidrio, Madera), salvo que marquen una pauta salarial general muy relevante.
+        Premios, becas, declaraciones de interés cultural. Multas a particulares desconocidos (contrabando menor).
+
+        Datos a analizar:
+        {json.dumps(items_para_modelo, ensure_ascii=False)}
+        """
         modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
         
         for modelo in modelos:
@@ -325,9 +487,42 @@ class AnalistaLegislativo:
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
                     data = json.loads(response.text)
+
+                    # --- Post-proceso anti-mezcla: reubicar items según su seccion_esperada ---
+                    secciones_keys = ["boletin", "diputados", "senado"]
+                    data_normalizada = {k: {"resumen": "", "items": []} for k in secciones_keys}
+
+                    for k in secciones_keys:
+                        bloque = data.get(k, {}) if isinstance(data, dict) else {}
+                        if isinstance(bloque, dict):
+                            data_normalizada[k]["resumen"] = bloque.get("resumen", "")
+
+                    # Recolectar todos los items que devolvió el modelo (vengan donde vengan)
+                    items_modelo = []
+                    for k in secciones_keys:
+                        bloque = data.get(k, {}) if isinstance(data, dict) else {}
+                        if isinstance(bloque, dict):
+                            items_k = bloque.get("items", [])
+                            if isinstance(items_k, list):
+                                items_modelo.extend(items_k)
+
+                    # Redistribuir por origen esperado
+                    for it in items_modelo:
+                        if not isinstance(it, dict):
+                            continue
+                        id_ref = str(it.get("id_interno", "")).strip()
+                        if not id_ref:
+                            continue
+                        k_esperada = seccion_esperada_por_id.get(id_ref)
+                        if k_esperada not in secciones_keys:
+                            # si no lo conocemos, lo dejamos donde más sentido tenga (fallback)
+                            k_esperada = "boletin" if id_ref.startswith("BO") else "diputados"
+                        data_normalizada[k_esperada]["items"].append(it)
                     
                     html_output = self._generar_html_header()
-                    todos_los_detalles_para_excel = [] 
+                    # Para Excel: consolidar items sin duplicar id_interno
+                    todos_los_detalles_para_excel = []
+                    vistos_excel = set()
 
                     secciones = [
                         ("Boletín Oficial", "boletin"),
@@ -338,11 +533,15 @@ class AnalistaLegislativo:
                     hay_contenido_relevante_total = False
 
                     for titulo_seccion, key_json in secciones:
-                        bloque = data.get(key_json, {})
+                        bloque = data_normalizada.get(key_json, {})
                         items = bloque.get("items", [])
                         resumen = bloque.get("resumen", "")
-                        
-                        todos_los_detalles_para_excel.extend(items)
+
+                        for it in items:
+                            id_ref = str(it.get("id_interno", "")).strip()
+                            if id_ref and id_ref not in vistos_excel:
+                                todos_los_detalles_para_excel.append(it)
+                                vistos_excel.add(id_ref)
 
                         # FILTRO PARA EL EMAIL: Solo ALTO y MEDIO
                         items_email = [p for p in items if p.get('impacto', 'BAJO').upper() != 'BAJO']
@@ -369,6 +568,12 @@ class AnalistaLegislativo:
                                 ref = p.get('referencia', '')
                                 justificacion = p.get('justificacion', '')
                                 impacto = p.get('impacto', 'MEDIO').upper()
+
+                                # Fallbacks defensivos
+                                if not ref:
+                                    ref = meta.get("referencia", "")
+                                if not link_web:
+                                    link_web = "#"
 
                                 clase_badge = "bg-medio"
                                 if impacto == "ALTO": clase_badge = "bg-alto"

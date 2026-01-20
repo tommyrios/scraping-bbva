@@ -75,6 +75,14 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
         fecha = str(row['Fecha de inicio'])
         proyecto = str(row['Proyecto'])
         link = str(row['Comisiones'])
+
+        # --- ORIGEN REAL ---
+        # - Para BO: el origen es siempre "Boletin Oficial"
+        # - Para Proyectos (PL): usar el origen detectado por el scraper (ej. Senado aunque esté en Diputados)
+        if gestor.prefijo == "BO":
+            origen_final = nombre_origen
+        else:
+            origen_final = str(row.get('Cámara de Origen') or row.get('Origen') or nombre_origen).strip() or nombre_origen
         
         partido = str(row.get('Partido Político', ''))
         provincia = str(row.get('Provincia', ''))
@@ -90,8 +98,17 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
 
             if not obs_actual or "Error" in obs_actual:
                 stats["reanalizados"] += 1
+
+                # Si ya existía en la Sheet, respetar el origen guardado (columna B en Proyectos)
+                if gestor.prefijo == "BO":
+                    origen_ia = nombre_origen
+                else:
+                    origen_ia = str(datos_viejos[1]).strip() if len(datos_viejos) > 1 else origen_final
+                    if not origen_ia:
+                        origen_ia = origen_final
+
                 fila_ia = [
-                    datos_viejos[0], nombre_origen, exp_web, autor,
+                    datos_viejos[0], origen_ia, exp_web, autor,
                     fecha, proyecto, link, 
                     '','','','','' 
                 ]
@@ -110,7 +127,7 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
                 rango = f"A{fila_excel}:G{fila_excel}"
             else:
                 valores = [
-                    id_nuevo, nombre_origen, exp_web, autor,
+                    id_nuevo, origen_final, exp_web, autor,
                     fecha, proyecto, link,
                     '', '', partido, provincia, ''
                 ]
@@ -121,7 +138,7 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
             operaciones_globales.append({'range': rango, 'values': [valores]})
             
             fila_ia = [
-                id_nuevo, nombre_origen, exp_web, autor,
+                id_nuevo, origen_final, exp_web, autor,
                 fecha, proyecto, link,
                 '', '', '', '', ''
             ]

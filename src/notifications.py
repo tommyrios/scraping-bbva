@@ -2,6 +2,8 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+from pathlib import Path
 
 class MensajeSender:
     def __init__(self):
@@ -20,18 +22,29 @@ class MensajeSender:
             print("❌ No hay destinatarios definidos.")
             return
 
-        msg = MIMEMultipart('alternative')
+        # 'related' permite embebidos (cid:...) dentro del HTML.
+        msg = MIMEMultipart('related')
+        alt = MIMEMultipart('alternative')
+        msg.attach(alt)
         msg['Subject'] = asunto
         msg['From'] = self.email_user
         msg['To'] = ", ".join(self.destinatarios)
 
         texto_plano = "Por favor, habilite la visualización HTML para ver este reporte."
-        part1 = MIMEText(texto_plano, 'plain')
-        
-        part2 = MIMEText(contenido_html, 'html')
+        alt.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
+        alt.attach(MIMEText(contenido_html, 'html', 'utf-8'))
 
-        msg.attach(part1)
-        msg.attach(part2)
+        # Logo BBVA inline (evita "imagen rota" cuando el cliente bloquea imágenes remotas)
+        logo_path = Path(__file__).resolve().parent / "assets" / "BBVA_WHITE.png"
+        if logo_path.exists():
+            try:
+                with open(logo_path, "rb") as f:
+                    img = MIMEImage(f.read(), _subtype="png")
+                img.add_header('Content-ID', '<bbva_logo>')
+                img.add_header('Content-Disposition', 'inline', filename='BBVA_WHITE.png')
+                msg.attach(img)
+            except Exception as e:
+                print(f"⚠️ No se pudo adjuntar el logo inline: {e}")
 
         try:
             server = smtplib.SMTP('smtp.gmail.com', 587)

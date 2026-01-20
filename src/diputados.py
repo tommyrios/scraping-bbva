@@ -1,5 +1,6 @@
 import time
 import pandas as pd
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
@@ -24,15 +25,71 @@ class ScrapearDiputados:
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
         self.data = []
 
+    def _normalizar_origen(self, origen_raw: str) -> str:
+        """Normaliza texto libre a 'Diputados'/'Senado'."""
+        if not origen_raw:
+            return "Diputados"
+        o = " ".join(origen_raw.split()).lower()
+        if "senado" in o:
+            return "Senado"
+        if "diput" in o:
+            return "Diputados"
+        return "Diputados"
+
+    def _inferir_origen_por_expediente(self, expediente: str) -> str:
+        """Inferencia por sigla del expediente.
+
+        Diputados suele venir como:
+          - 6750-D-2025
+          - 0022-JGM-2025
+        Senado suele venir como:
+          - xxxx-S-2025
+          - xxxx-PE-2025 / PC / PL / PD / CO / CC
+        """
+        exp = " ".join((expediente or "").strip().upper().split())
+        if not exp or exp == "S/D":
+            return "Diputados"
+
+        siglas_senado = {"S", "PE", "PC", "PL", "PD", "CO", "CC"}
+        siglas_diputados = {"D", "JGM"}
+
+        # Caso con guiones: 6750-D-2025 / 0022-JGM-2025 / 1234-PE-2025
+        m = re.search(r"-\s*([A-Z]{1,3})\s*-", exp)
+        if m:
+            sigla = m.group(1)
+            if sigla in siglas_senado:
+                return "Senado"
+            if sigla in siglas_diputados:
+                return "Diputados"
+
+        # Fallback por formatos alternativos (por si aparecen tipo S-1234/25)
+        if re.search(r"\bS\s*[-/]\s*\d{1,6}\s*[-/]\s*\d{2,4}\b", exp):
+            return "Senado"
+
+        return "Diputados"
+
     def get_origen(self, soup):
-        """Busca el span que contiene 'Iniciado en' y extrae el valor."""
+        """Obtiene el origen del proyecto con estrategia robusta.
+
+        1) Usa metadatos explícitos (Iniciado en / Cámara de origen / Origen)
+        2) Fallback: infiere por sigla del expediente
+        """
         try:
+            # 1) Metadatos explícitos
             spans = soup.find_all('span')
             for s in spans:
-                if "Iniciado en" in s.text:
-                    return s.text.split(":")[-1].strip()
-            return "Diputados" 
-        except: 
+                txt = " ".join(s.stripped_strings)
+                if not txt:
+                    continue
+                if re.search(r"\b(iniciado en|c[aá]mara de origen|origen)\b", txt, re.IGNORECASE):
+                    origen_raw = txt.split(":")[-1].strip()
+                    return self._normalizar_origen(origen_raw)
+
+            # 2) Inferencia por expediente
+            exp = self.get_expediente(soup)
+            return self._inferir_origen_por_expediente(exp)
+
+        except Exception:
             return "Diputados"
 
     def get_expediente(self, soup):
