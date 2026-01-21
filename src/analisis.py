@@ -15,16 +15,20 @@ class AnalistaLegislativo:
         exp = (expediente or "").strip()
         if not exp:
             return ""
-        if "Diputados" in (origen or ""):
+        o = (origen or "").lower()
+        if "diput" in o:
             return f"https://www.google.com/search?q=site:diputados.gov.ar+%22{exp}%22"
-        if "Senado" in (origen or ""):
+        if "senad" in o:
             return f"https://www.google.com/search?q=site:senado.gob.ar+%22{exp}%22"
-        return ""
+        if "bolet" in o:
+            return f"https://www.google.com/search?q=site:boletinoficial.gob.ar+%22{exp}%22"
+        return f"https://www.google.com/search?q=%22{exp}%22"
 
     def _generar_html_header(self):
+        # Logo inline (CID) para evitar 'imagen rota' en clientes que bloquean imágenes remotas
         LOGO_URL = "cid:bbva_logo"
 
-        return f'''
+        return f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -51,11 +55,11 @@ class AnalistaLegislativo:
                 }}
                 .logo-row {{
                     text-align: left;
-                    margin-bottom: 20px;
+                    margin-bottom: 18px;
                     width: 100%;
                 }}
                 .logo-img {{
-                    height: 30px;
+                    height: 44px; /* ✅ más grande */
                     width: auto;
                     display: block;
                     border: 0;
@@ -111,7 +115,7 @@ class AnalistaLegislativo:
                     border-bottom: 1px solid #eeeeee;
                 }}
                 .item:last-child {{ border-bottom: none; }}
-                .badges-row {{ margin-bottom: 12px; }}
+                .badges-row {{ margin-bottom: 10px; }}
                 .badge {{
                     padding: 6px 12px;
                     border-radius: 4px;
@@ -121,16 +125,24 @@ class AnalistaLegislativo:
                     display: inline-block;
                     vertical-align: middle;
                     margin-right: 8px;
+                    margin-bottom: 6px;
                 }}
                 .bg-alto {{ background-color: #da3851; color: white; }}
                 .bg-medio {{ background-color: #f8cd51; color: #121212; }}
+                .bg-bajo {{ background-color: #d7e9f7; color: #072146; border: 1px solid #b9d6ef; }}
                 .bg-ref {{ background-color: #f2f2f2; color: #555; border: 1px solid #ddd; }}
                 .item-title {{
                     font-size: 18px;
                     font-weight: 700;
                     color: #121212;
-                    margin: 0 0 10px 0;
+                    margin: 0 0 8px 0;
                     line-height: 1.4;
+                }}
+                .autor {{
+                    font-size: 13px;
+                    color: #666;
+                    margin-top: -2px;
+                    margin-bottom: 10px;
                 }}
                 .justificacion {{
                     font-size: 15px;
@@ -179,7 +191,7 @@ class AnalistaLegislativo:
                     </div>
                 </div>
                 <div class="content">
-        '''
+        """
 
     def _generar_html_footer(self):
         return """
@@ -204,17 +216,63 @@ class AnalistaLegislativo:
         html += self._generar_html_footer()
         return html
 
+    def _seccion_esperada(self, origen: str, id_interno: str) -> str:
+        o = (origen or "").lower()
+        if "boletin" in o or str(id_interno).startswith("BO"):
+            return "boletin"
+        if "senado" in o:
+            return "senado"
+        return "diputados"
+
+    def _normalizar_impacto(self, item: dict) -> str:
+        """
+        Acepta tanto el formato nuevo (impacto_nivel) como el viejo (impacto),
+        y devuelve solo: ALTO | MEDIO | BAJO
+        """
+        val = str(item.get("impacto_nivel") or item.get("impacto") or "BAJO").upper().strip()
+
+        # Si viniera mezclado tipo "IMPACTO LABORAL/GREMIAL", intentamos rescatar nivel
+        for lvl in ("ALTO", "MEDIO", "BAJO"):
+            if lvl in val:
+                return lvl
+
+        if val not in ("ALTO", "MEDIO", "BAJO"):
+            return "BAJO"
+        return val
+
+    def _normalizar_categorias(self, item: dict) -> list:
+        cats = item.get("categorias", [])
+        if isinstance(cats, str):
+            raw = cats.replace("|", "/")
+            parts = [p.strip() for p in raw.split("/") if p.strip()]
+            cats = parts
+        if not isinstance(cats, list):
+            cats = []
+        # capitalizar prolijo
+        out = []
+        for c in cats:
+            if not isinstance(c, str):
+                continue
+            cc = c.strip()
+            if not cc:
+                continue
+            out.append(cc[:1].upper() + cc[1:].lower())
+        # unique, mantener orden, máx 4
+        seen = set()
+        uniq = []
+        for c in out:
+            key = c.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            uniq.append(c)
+            if len(uniq) >= 4:
+                break
+        return uniq
+
     def analizar_proyectos(self, filas_nuevas):
         if not self.client or not filas_nuevas:
             return self._generar_html_vacio("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
-
-        def seccion_esperada(origen: str, id_interno: str) -> str:
-            o = (origen or "").lower()
-            if "boletin" in o or str(id_interno).startswith("BO"):
-                return "boletin"
-            if "senado" in o:
-                return "senado"
-            return "diputados"
 
         items_para_modelo = []
         meta_data_por_id = {}
@@ -224,9 +282,10 @@ class AnalistaLegislativo:
             id_interno = str(fila[0]).strip()
             origen = str(fila[1]).strip()
             expediente = str(fila[2]).strip()
+            autor = str(fila[3]).strip() if len(fila) > 3 else ""
             contenido_completo = str(fila[5])
 
-            sec = seccion_esperada(origen, id_interno)
+            sec = self._seccion_esperada(origen, id_interno)
             seccion_esperada_por_id[id_interno] = sec
 
             link_en_fila = str(fila[6]).strip() if len(fila) > 6 else ""
@@ -237,7 +296,8 @@ class AnalistaLegislativo:
             meta_data_por_id[id_interno] = {
                 "titulo": titulo_simple,
                 "link": link,
-                "referencia": expediente
+                "referencia": expediente,
+                "autor": autor,  # ✅ para mostrar en el reporte
             }
 
             items_para_modelo.append({
@@ -245,6 +305,7 @@ class AnalistaLegislativo:
                 "referencia": expediente,
                 "descripcion": contenido_completo,
                 "fuente": origen,
+                "autor": autor,
                 "seccion_esperada": sec
             })
 
@@ -252,21 +313,46 @@ class AnalistaLegislativo:
 Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
 Analiza los siguientes items del Boletín Oficial y Congreso.
 
-TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
-
-Devuelve un JSON con esta estructura exacta:
-{{
-  "boletin": {{
-    "resumen": "...",
-    "items": [{{"id_interno":"...","referencia":"...","titulo_descriptivo":"...","impacto":"...","justificacion":"..."}}]
-  }},
-  "diputados": {{ "resumen": "...", "items": [] }},
-  "senado": {{ "resumen": "...", "items": [] }}
-}}
+OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas.
 
 REGLA DE CLASIFICACIÓN (OBLIGATORIA):
 - Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
 - Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
+
+IMPUESTO DE SALIDA (ESTRUCTURA JSON exacta):
+{{
+  "boletin": {{
+    "resumen": "Resumen ejecutivo (máx 3 líneas).",
+    "items": [
+      {{
+        "id_interno": "...",
+        "referencia": "...",
+        "titulo_descriptivo": "...",
+        "impacto_nivel": "ALTO|MEDIO|BAJO",
+        "categorias": ["Laboral","Gremial","Infraestructura"],
+        "justificacion": "..."
+      }}
+    ]
+  }},
+  "diputados": {{
+    "resumen": "Resumen ejecutivo (máx 3 líneas).",
+    "items": []
+  }},
+  "senado": {{
+    "resumen": "Resumen ejecutivo (máx 3 líneas).",
+    "items": []
+  }}
+}}
+
+REGLAS DE IMPACTO (OBLIGATORIAS):
+- "impacto_nivel" SOLO puede ser: "ALTO", "MEDIO" o "BAJO". Sin texto adicional.
+- Las categorías van SOLO en "categorias".
+- "categorias" debe ser una lista de 1 a 4 strings, con inicial en mayúscula (ej: "Laboral").
+
+ESTILO DE JUSTIFICACIÓN:
+- Máximo 2 líneas.
+- Decisiones/regulación: explicar qué cambia (montos, plazos, alcance, sanción, alta/baja, etc.).
+- Proyectos: explicar el efecto potencial si avanzara.
 
 Datos a analizar:
 {json.dumps(items_para_modelo, ensure_ascii=False)}
@@ -285,14 +371,16 @@ Datos a analizar:
                     )
                     data = json.loads(response.text)
 
+                    # Normalizar secciones + anti-mezcla por sección esperada
                     secciones_keys = ["boletin", "diputados", "senado"]
                     data_norm = {k: {"resumen": "", "items": []} for k in secciones_keys}
 
                     for k in secciones_keys:
                         bloque = data.get(k, {}) if isinstance(data, dict) else {}
                         if isinstance(bloque, dict):
-                            data_norm[k]["resumen"] = bloque.get("resumen", "")
+                            data_norm[k]["resumen"] = bloque.get("resumen", "") or ""
 
+                    # juntamos todos los items devueltos (aunque estén mal ubicados) y los reubicamos
                     items_modelo = []
                     for k in secciones_keys:
                         bloque = data.get(k, {}) if isinstance(data, dict) else {}
@@ -312,6 +400,7 @@ Datos a analizar:
                             k_esp = "boletin" if id_ref.startswith("BO") else "diputados"
                         data_norm[k_esp]["items"].append(it)
 
+                    # Render HTML (email: solo ALTO/MEDIO)
                     html_output = self._generar_html_header()
 
                     todos_los_detalles_para_excel = []
@@ -322,16 +411,21 @@ Datos a analizar:
 
                     for titulo_seccion, key_json in secciones:
                         bloque = data_norm.get(key_json, {})
-                        items = bloque.get("items", [])
-                        resumen = bloque.get("resumen", "")
+                        items = bloque.get("items", []) if isinstance(bloque, dict) else []
+                        resumen = bloque.get("resumen", "") if isinstance(bloque, dict) else ""
 
+                        # juntar para export a excel (sin duplicar)
                         for it in items:
                             id_ref = str(it.get("id_interno", "")).strip()
                             if id_ref and id_ref not in vistos_excel:
                                 todos_los_detalles_para_excel.append(it)
                                 vistos_excel.add(id_ref)
 
-                        items_email = [p for p in items if str(p.get("impacto", "BAJO")).upper() != "BAJO"]
+                        def nivel(item):
+                            return self._normalizar_impacto(item)
+
+                        # ✅ Email solo ALTO/MEDIO
+                        items_email = [p for p in items if nivel(p) in ("ALTO", "MEDIO")]
                         if not items_email:
                             continue
 
@@ -340,8 +434,8 @@ Datos a analizar:
                         if resumen:
                             html_output += f'<div class="resumen-block">{resumen}</div>'
 
-                        orden = {"ALTO": 1, "MEDIO": 2}
-                        items_ordenados = sorted(items_email, key=lambda x: orden.get(str(x.get("impacto", "MEDIO")).upper(), 99))
+                        orden = {"ALTO": 1, "MEDIO": 2, "BAJO": 3}
+                        items_ordenados = sorted(items_email, key=lambda x: orden.get(nivel(x), 99))
 
                         for p in items_ordenados:
                             id_ref = str(p.get("id_interno", "")).strip()
@@ -350,18 +444,35 @@ Datos a analizar:
                             titulo_mostrar = p.get("titulo_descriptivo") or meta.get("titulo") or "Sin título"
                             ref = p.get("referencia") or meta.get("referencia") or ""
                             link_web = meta.get("link") or "#"
-                            justificacion = p.get("justificacion", "")
-                            impacto = str(p.get("impacto", "MEDIO")).upper()
+                            justificacion = p.get("justificacion", "") or ""
 
-                            clase_badge = "bg-alto" if impacto == "ALTO" else "bg-medio"
+                            impacto = self._normalizar_impacto(p)
+                            categorias = self._normalizar_categorias(p)
+
+                            # autor desde meta (viene del input)
+                            autor_item = (meta.get("autor") or "").strip()
+                            autor_html = ""
+                            if autor_item and autor_item.upper() != "S/D":
+                                autor_html = f'<div class="autor">Autor: <b>{autor_item}</b></div>'
+
+                            if impacto == "ALTO":
+                                clase_badge = "bg-alto"
+                            elif impacto == "MEDIO":
+                                clase_badge = "bg-medio"
+                            else:
+                                clase_badge = "bg-bajo"
+
+                            cat_badges = "".join([f'<span class="badge bg-ref">{c}</span>' for c in categorias])
 
                             html_output += f"""
                             <div class="item">
                                 <div class="badges-row">
                                     <span class="badge bg-ref">{ref}</span>
                                     <span class="badge {clase_badge}">IMPACTO {impacto}</span>
+                                    {cat_badges}
                                 </div>
                                 <div class="item-title">{titulo_mostrar}</div>
+                                {autor_html}
                                 <div class="justificacion">{justificacion}</div>
                                 <a href="{link_web}" target="_blank" class="btn-link">Ver Texto Oficial &rarr;</a>
                             </div>
