@@ -4,190 +4,166 @@ import time
 from google import genai
 from google.genai import types
 
+
 class AnalistaLegislativo:
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key) if api_key else None
 
     def generar_link(self, origen, expediente):
-        exp = expediente.strip()
-        if "Diputados" in origen:
+        """Fallback si no contamos con un link real en la corrida."""
+        exp = (expediente or "").strip()
+        if not exp:
+            return ""
+        if "Diputados" in (origen or ""):
             return f"https://www.google.com/search?q=site:diputados.gov.ar+%22{exp}%22"
-        elif "Senado" in origen:
-            # El endpoint verExp no siempre coincide con el formato del expediente.
-            # Para máxima robustez, usamos búsqueda por sitio.
+        if "Senado" in (origen or ""):
             return f"https://www.google.com/search?q=site:senado.gob.ar+%22{exp}%22"
         return ""
 
     def _generar_html_header(self):
-        """Genera el encabezado HTML con Logo BBVA propio (GitHub Raw)."""
-        # Logo embebido (CID) para evitar "imagen rota" por bloqueo de imágenes remotas.
         LOGO_URL = "cid:bbva_logo"
-        
+
         return f'''
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
             <style>
-                /* Reset y Fuente */
-                body {{ 
-                    font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif; 
-                    color: #333; 
-                    line-height: 1.6; 
-                    background-color: #ffffff; 
-                    margin: 0; 
-                    padding: 0; 
+                body {{
+                    font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif;
+                    color: #333;
+                    line-height: 1.6;
+                    background-color: #ffffff;
+                    margin: 0;
+                    padding: 0;
                 }}
-                
-                .container {{ 
-                    width: 100%; 
-                    max-width: 100%; 
-                    margin: 0; 
-                    background: #fff; 
+                .container {{
+                    width: 100%;
+                    max-width: 100%;
+                    margin: 0;
+                    background: #fff;
                 }}
-                
-                /* --- HEADER CONFIG --- */
-                .header {{ 
-                    background-color: #072146; /* Azul BBVA */
-                    color: white; 
-                    padding: 30px 5%; 
+                .header {{
+                    background-color: #072146;
+                    color: white;
+                    padding: 30px 5%;
                 }}
-                
-                /* Fila del Logo: Alineada a la Izquierda */
                 .logo-row {{
                     text-align: left;
                     margin-bottom: 20px;
                     width: 100%;
                 }}
-                
-                /* Imagen del Logo */
-                .logo-img {{ 
-                    height: 30px; /* Tamaño ajustado */
-                    width: auto; 
-                    display: block; 
+                .logo-img {{
+                    height: 30px;
+                    width: auto;
+                    display: block;
                     border: 0;
                     outline: none;
                     text-decoration: none;
                 }}
-
-                /* Fila del Título: Centrada */
                 .title-row {{
                     text-align: center;
                     width: 100%;
                 }}
-                
-                .header h1 {{ 
-                    margin: 0; 
-                    font-size: 26px; 
-                    font-weight: 500; 
-                    letter-spacing: 0.5px; 
-                    color: #ffffff; 
+                .header h1 {{
+                    margin: 0;
+                    font-size: 26px;
+                    font-weight: 500;
+                    letter-spacing: 0.5px;
+                    color: #ffffff;
                 }}
-                
-                .header h2 {{ 
-                    margin: 8px 0 0; 
-                    font-size: 13px; 
-                    opacity: 0.8; 
-                    font-weight: 400; 
-                    text-transform: uppercase; 
-                    letter-spacing: 2px; 
-                    color: #a4c4e0; 
+                .header h2 {{
+                    margin: 8px 0 0;
+                    font-size: 13px;
+                    opacity: 0.8;
+                    font-weight: 400;
+                    text-transform: uppercase;
+                    letter-spacing: 2px;
+                    color: #a4c4e0;
                 }}
-                
-                /* --- CONTENIDO --- */
-                .content {{ 
-                    padding: 40px 5%; 
-                    background-color: #ffffff; 
+                .content {{
+                    padding: 40px 5%;
+                    background-color: #ffffff;
                 }}
-                
-                .section-title {{ 
-                    color: #072146; 
-                    border-bottom: 3px solid #072146; 
-                    padding-bottom: 10px; 
-                    margin-top: 40px; 
-                    margin-bottom: 25px; 
-                    font-size: 18px; 
-                    font-weight: 700; 
-                    text-transform: uppercase; 
+                .section-title {{
+                    color: #072146;
+                    border-bottom: 3px solid #072146;
+                    padding-bottom: 10px;
+                    margin-top: 40px;
+                    margin-bottom: 25px;
+                    font-size: 18px;
+                    font-weight: 700;
+                    text-transform: uppercase;
                 }}
-                
-                .resumen-block {{ 
-                    background-color: #f4f8fb; 
-                    border-left: 5px solid #1973b8; 
-                    padding: 20px; 
-                    margin-bottom: 30px; 
-                    font-style: italic; 
-                    color: #444; 
-                    font-size: 15px; 
+                .resumen-block {{
+                    background-color: #f4f8fb;
+                    border-left: 5px solid #1973b8;
+                    padding: 20px;
+                    margin-bottom: 30px;
+                    font-style: italic;
+                    color: #444;
+                    font-size: 15px;
                 }}
-                
-                /* Items */
-                .item {{ 
-                    margin-bottom: 35px; 
-                    padding-bottom: 25px; 
-                    border-bottom: 1px solid #eeeeee; 
+                .item {{
+                    margin-bottom: 35px;
+                    padding-bottom: 25px;
+                    border-bottom: 1px solid #eeeeee;
                 }}
                 .item:last-child {{ border-bottom: none; }}
-                
                 .badges-row {{ margin-bottom: 12px; }}
-                .badge {{ 
-                    padding: 6px 12px; 
-                    border-radius: 4px; 
-                    font-size: 11px; 
-                    font-weight: 700; 
-                    text-transform: uppercase; 
-                    display: inline-block; 
-                    vertical-align: middle; 
-                    margin-right: 8px; 
+                .badge {{
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    display: inline-block;
+                    vertical-align: middle;
+                    margin-right: 8px;
                 }}
-                
                 .bg-alto {{ background-color: #da3851; color: white; }}
                 .bg-medio {{ background-color: #f8cd51; color: #121212; }}
                 .bg-ref {{ background-color: #f2f2f2; color: #555; border: 1px solid #ddd; }}
-                
-                .item-title {{ 
-                    font-size: 18px; 
-                    font-weight: 700; 
-                    color: #121212; 
-                    margin: 0 0 10px 0; 
-                    line-height: 1.4; 
+                .item-title {{
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: #121212;
+                    margin: 0 0 10px 0;
+                    line-height: 1.4;
                 }}
-                .justificacion {{ 
-                    font-size: 15px; 
-                    color: #444; 
-                    margin-bottom: 15px; 
-                    text-align: left; 
-                    line-height: 1.6; 
+                .justificacion {{
+                    font-size: 15px;
+                    color: #444;
+                    margin-bottom: 15px;
+                    text-align: left;
+                    line-height: 1.6;
                 }}
-                
-                .btn-link {{ 
-                    display: inline-block; 
-                    font-size: 12px; 
-                    color: #004481; 
-                    text-decoration: none; 
-                    font-weight: 700; 
-                    border: 2px solid #004481; 
-                    padding: 10px 20px; 
-                    border-radius: 4px; 
-                    transition: background 0.2s; 
-                    text-transform: uppercase; 
+                .btn-link {{
+                    display: inline-block;
+                    font-size: 12px;
+                    color: #004481;
+                    text-decoration: none;
+                    font-weight: 700;
+                    border: 2px solid #004481;
+                    padding: 10px 20px;
+                    border-radius: 4px;
+                    transition: background 0.2s;
+                    text-transform: uppercase;
                 }}
-                .btn-link:hover {{ 
-                    background-color: #004481; 
-                    color: white; 
+                .btn-link:hover {{
+                    background-color: #004481;
+                    color: white;
                 }}
-                
                 .empty-state {{ text-align: center; padding: 40px 0; color: #666; }}
                 .empty-icon {{ font-size: 40px; margin-bottom: 15px; display: block; opacity: 0.5; }}
-                
-                .footer {{ 
-                    background-color: #f9f9f9; 
-                    padding: 30px 5%; 
-                    text-align: center; 
-                    font-size: 12px; 
-                    color: #999; 
-                    border-top: 1px solid #eaeaea; 
+                .footer {{
+                    background-color: #f9f9f9;
+                    padding: 30px 5%;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #999;
+                    border-top: 1px solid #eaeaea;
                 }}
             </style>
         </head>
@@ -197,7 +173,6 @@ class AnalistaLegislativo:
                     <div class="logo-row">
                         <img src="{LOGO_URL}" alt="BBVA" class="logo-img">
                     </div>
-                    
                     <div class="title-row">
                         <h1>Reporte Regulatorio Diario</h1>
                         <h2>Sistema de Monitoreo de Asuntos Públicos</h2>
@@ -218,7 +193,6 @@ class AnalistaLegislativo:
         """
 
     def _generar_html_vacio(self, mensaje="Sin novedades relevantes en esta ejecución."):
-        """Helper para generar reporte vacío pero con Branding."""
         html = self._generar_html_header()
         html += f"""
             <div class="empty-state">
@@ -234,18 +208,17 @@ class AnalistaLegislativo:
         if not self.client or not filas_nuevas:
             return self._generar_html_vacio("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
 
-        # --- Construcción de payload determinístico por origen ---
-        items_para_modelo = []
-        meta_data_por_id = {}
-        seccion_esperada_por_id = {}
-
-        def _seccion_esperada(origen_txt: str) -> str:
-            o = (origen_txt or "").lower()
-            if "boletin" in o:
+        def seccion_esperada(origen: str, id_interno: str) -> str:
+            o = (origen or "").lower()
+            if "boletin" in o or str(id_interno).startswith("BO"):
                 return "boletin"
             if "senado" in o:
                 return "senado"
             return "diputados"
+
+        items_para_modelo = []
+        meta_data_por_id = {}
+        seccion_esperada_por_id = {}
 
         for fila in filas_nuevas:
             id_interno = str(fila[0]).strip()
@@ -253,24 +226,17 @@ class AnalistaLegislativo:
             expediente = str(fila[2]).strip()
             contenido_completo = str(fila[5])
 
-            seccion = _seccion_esperada(origen)
-            seccion_esperada_por_id[id_interno] = seccion
+            sec = seccion_esperada(origen, id_interno)
+            seccion_esperada_por_id[id_interno] = sec
 
-            if seccion == "boletin":
-                link = str(fila[6])
-            else:
-                link = self.generar_link(origen, expediente)
+            link_en_fila = str(fila[6]).strip() if len(fila) > 6 else ""
+            link = link_en_fila or self.generar_link(origen, expediente)
 
-            titulo_simple = (contenido_completo.split('\n')[0]
-                            .replace("TITULO: ", "")
-                            .replace("NORMA: ", "")
-                            .strip())
+            titulo_simple = contenido_completo.split('\n')[0].replace("TITULO: ", "").replace("NORMA: ", "").strip()
 
             meta_data_por_id[id_interno] = {
                 "titulo": titulo_simple,
                 "link": link,
-                "origen": origen,
-                "seccion": seccion,
                 "referencia": expediente
             }
 
@@ -279,225 +245,54 @@ class AnalistaLegislativo:
                 "referencia": expediente,
                 "descripcion": contenido_completo,
                 "fuente": origen,
-                "seccion_esperada": seccion
+                "seccion_esperada": sec
             })
 
-        # --- AQUÍ ESTÁ TU PROMPT EXACTO ---
         prompt = f"""
-        Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
-        Analiza los siguientes items del Boletín Oficial y Congreso.
+Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
+Analiza los siguientes items del Boletín Oficial y Congreso.
 
-        TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
+TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
 
-        Instrucciones para la redacción de campos:
-        1. "titulo_descriptivo":
-           - Titular periodístico breve.
-           - Si es DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]".
-           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL] (ej: Tarifas, Impuestos)".
-           - Elimina códigos burocráticos (ej: 'RESOL-2026...').
+Devuelve un JSON con esta estructura exacta:
+{{
+  "boletin": {{
+    "resumen": "...",
+    "items": [{{"id_interno":"...","referencia":"...","titulo_descriptivo":"...","impacto":"...","justificacion":"..."}}]
+  }},
+  "diputados": {{ "resumen": "...", "items": [] }},
+  "senado": {{ "resumen": "...", "items": [] }}
+}}
 
-        2. "justificacion" (El análisis):
-           - ESTILO: Sintético pero rico en datos (2 líneas máximo).
-           - PARA DESIGNACIONES: DEBES mencionar explícitamente el NOMBRE COMPLETO y el CARGO EXACTO. (Ej: "Designa a Luis Fontana como titular de ANMAT en reemplazo de Nélida Bisio").
-           - PARA NORMATIVAS: Explica QUÉ se establece (montos, plazos, tasas, leyes que se modifican). NO digas "tiene impacto sectorial", di POR QUÉ (ej: "Fija precio de energía en 28 USD/MWh" o "Modifica alícuota de impuesto PAIS").
+REGLA DE CLASIFICACIÓN (OBLIGATORIA):
+- Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
+- Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
 
-        Devuelve un JSON con esta estructura exacta:
-        {{
-            "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas con lo más destacado del día.",
-                "items": [ 
-                    {{ 
-                        "id_interno": "...", 
-                        "referencia": "...", 
-                        "titulo_descriptivo": "...",
-                        "impacto": "...", 
-                        "justificacion": "..." 
-                    }} 
-                ]
-            }},
-            "diputados": {{
-                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
-                "items": []
-            }},
-            "senado": {{
-                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
-                "items": []
-            }}
-        }}
+Datos a analizar:
+{json.dumps(items_para_modelo, ensure_ascii=False)}
+"""
 
-        REGLA DE CLASIFICACIÓN (OBLIGATORIA):
-        - Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
-        - Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
-
-        CRITERIOS DE IMPACTO:
-        - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral). Todo lo emanado por: BCRA, CNV, UIF, AFIP (ARCA), Secretaría de Comercio, Ministerio de Economía. 
-        Normas sobre: Tasas de interés, Deuda Pública (Letras, Bonos), Tipo de Cambio, Impuestos, Lavado de Dinero (PLA/FT), Seguridad Informática. Designaciones CLAVE: Directorio BCRA, Ministro de Economía, Jefatura de Gabinete. 
-        
-        - MEDIO: Designaciones de funcionarios (Secretarios, Directores, Embajadores) y normas sectoriales específicas. 
-       
-        - BAJO: Temas de interés general, declaraciones de interés o efemérides. Homologaciones de convenios colectivos de industrias ajenas (Ej: Pasteleros, Vidrio, Madera), salvo que marquen una pauta salarial general muy relevante.
-        Premios, becas, declaraciones de interés cultural. Multas a particulares desconocidos (contrabando menor).
-
-        Datos a analizar:
-        {json.dumps(items_para_modelo, ensure_ascii=False)}
-        """
-    def _generar_html_footer(self):
-        return """
-                </div>
-                <div class="footer">
-                    &copy; 2026 BBVA Argentina • Generado por Inteligencia Artificial (Gemini)
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-    def _generar_html_vacio(self, mensaje="Sin novedades relevantes en esta ejecución."):
-        """Helper para generar reporte vacío pero con Branding."""
-        html = self._generar_html_header()
-        html += f"""
-            <div class="empty-state">
-                <span class="empty-icon">✅</span>
-                <h3>Sin Novedades</h3>
-                <p>{mensaje}</p>
-            </div>
-        """
-        html += self._generar_html_footer()
-        return html
-
-    def analizar_proyectos(self, filas_nuevas):
-        if not self.client or not filas_nuevas:
-            return self._generar_html_vacio("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
-
-        # --- Construcción de payload determinístico por origen ---
-        items_para_modelo = []
-        meta_data_por_id = {}
-        seccion_esperada_por_id = {}
-
-        def _seccion_esperada(origen_txt: str) -> str:
-            o = (origen_txt or "").lower()
-            if "boletin" in o:
-                return "boletin"
-            if "senado" in o:
-                return "senado"
-            return "diputados"
-
-        for fila in filas_nuevas:
-            id_interno = str(fila[0]).strip()
-            origen = str(fila[1]).strip()
-            expediente = str(fila[2]).strip()
-            contenido_completo = str(fila[5])
-
-            seccion = _seccion_esperada(origen)
-            seccion_esperada_por_id[id_interno] = seccion
-
-            if seccion == "boletin":
-                link = str(fila[6])
-            else:
-                link = self.generar_link(origen, expediente)
-
-            titulo_simple = (contenido_completo.split('\n')[0]
-                            .replace("TITULO: ", "")
-                            .replace("NORMA: ", "")
-                            .strip())
-
-            meta_data_por_id[id_interno] = {
-                "titulo": titulo_simple,
-                "link": link,
-                "origen": origen,
-                "seccion": seccion,
-                "referencia": expediente
-            }
-
-            items_para_modelo.append({
-                "id_interno": id_interno,
-                "referencia": expediente,
-                "descripcion": contenido_completo,
-                "fuente": origen,
-                "seccion_esperada": seccion
-            })
-
-        # --- AQUÍ ESTÁ TU PROMPT EXACTO ---
-        prompt = f"""
-        Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
-        Analiza los siguientes items del Boletín Oficial y Congreso.
-
-        TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno.
-
-        Instrucciones para la redacción de campos:
-        1. "titulo_descriptivo":
-           - Titular periodístico breve.
-           - Si es DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]".
-           - Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL] (ej: Tarifas, Impuestos)".
-           - Elimina códigos burocráticos (ej: 'RESOL-2026...').
-
-        2. "justificacion" (El análisis):
-           - ESTILO: Sintético pero rico en datos (2 líneas máximo).
-           - PARA DESIGNACIONES: DEBES mencionar explícitamente el NOMBRE COMPLETO y el CARGO EXACTO. (Ej: "Designa a Luis Fontana como titular de ANMAT en reemplazo de Nélida Bisio").
-           - PARA NORMATIVAS: Explica QUÉ se establece (montos, plazos, tasas, leyes que se modifican). NO digas "tiene impacto sectorial", di POR QUÉ (ej: "Fija precio de energía en 28 USD/MWh" o "Modifica alícuota de impuesto PAIS").
-
-        Devuelve un JSON con esta estructura exacta:
-        {{
-            "boletin": {{
-                "resumen": "Resumen ejecutivo de 3 líneas con lo más destacado del día.",
-                "items": [ 
-                    {{ 
-                        "id_interno": "...", 
-                        "referencia": "...", 
-                        "titulo_descriptivo": "...",
-                        "impacto": "...", 
-                        "justificacion": "..." 
-                    }} 
-                ]
-            }},
-            "diputados": {{
-                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
-                "items": []
-            }},
-            "senado": {{
-                "resumen": "Resumen ejecutivo de actividad parlamentaria.",
-                "items": []
-            }}
-        }}
-
-        REGLA DE CLASIFICACIÓN (OBLIGATORIA):
-        - Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
-        - Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
-
-        CRITERIOS DE IMPACTO:
-        - ALTO: Normas vigentes o Proyectos clave (Financiero, Cambiario, Impositivo, Laboral). Todo lo emanado por: BCRA, CNV, UIF, AFIP (ARCA), Secretaría de Comercio, Ministerio de Economía. 
-        Normas sobre: Tasas de interés, Deuda Pública (Letras, Bonos), Tipo de Cambio, Impuestos, Lavado de Dinero (PLA/FT), Seguridad Informática. Designaciones CLAVE: Directorio BCRA, Ministro de Economía, Jefatura de Gabinete. 
-        
-        - MEDIO: Designaciones de funcionarios (Secretarios, Directores, Embajadores) y normas sectoriales específicas. 
-       
-        - BAJO: Temas de interés general, declaraciones de interés o efemérides. Homologaciones de convenios colectivos de industrias ajenas (Ej: Pasteleros, Vidrio, Madera), salvo que marquen una pauta salarial general muy relevante.
-        Premios, becas, declaraciones de interés cultural. Multas a particulares desconocidos (contrabando menor).
-
-        Datos a analizar:
-        {json.dumps(items_para_modelo, ensure_ascii=False)}
-        """
         modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
-        
+
         for modelo in modelos:
-            for intento in range(3): 
+            for _ in range(3):
                 try:
                     print(f"Usando modelo {modelo}")
                     response = self.client.models.generate_content(
-                        model=modelo, contents=prompt,
+                        model=modelo,
+                        contents=prompt,
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
                     data = json.loads(response.text)
 
-                    # --- Post-proceso anti-mezcla: reubicar items según su seccion_esperada ---
                     secciones_keys = ["boletin", "diputados", "senado"]
-                    data_normalizada = {k: {"resumen": "", "items": []} for k in secciones_keys}
+                    data_norm = {k: {"resumen": "", "items": []} for k in secciones_keys}
 
                     for k in secciones_keys:
                         bloque = data.get(k, {}) if isinstance(data, dict) else {}
                         if isinstance(bloque, dict):
-                            data_normalizada[k]["resumen"] = bloque.get("resumen", "")
+                            data_norm[k]["resumen"] = bloque.get("resumen", "")
 
-                    # Recolectar todos los items que devolvió el modelo (vengan donde vengan)
                     items_modelo = []
                     for k in secciones_keys:
                         bloque = data.get(k, {}) if isinstance(data, dict) else {}
@@ -506,34 +301,27 @@ class AnalistaLegislativo:
                             if isinstance(items_k, list):
                                 items_modelo.extend(items_k)
 
-                    # Redistribuir por origen esperado
                     for it in items_modelo:
                         if not isinstance(it, dict):
                             continue
                         id_ref = str(it.get("id_interno", "")).strip()
                         if not id_ref:
                             continue
-                        k_esperada = seccion_esperada_por_id.get(id_ref)
-                        if k_esperada not in secciones_keys:
-                            # si no lo conocemos, lo dejamos donde más sentido tenga (fallback)
-                            k_esperada = "boletin" if id_ref.startswith("BO") else "diputados"
-                        data_normalizada[k_esperada]["items"].append(it)
-                    
+                        k_esp = seccion_esperada_por_id.get(id_ref)
+                        if k_esp not in secciones_keys:
+                            k_esp = "boletin" if id_ref.startswith("BO") else "diputados"
+                        data_norm[k_esp]["items"].append(it)
+
                     html_output = self._generar_html_header()
-                    # Para Excel: consolidar items sin duplicar id_interno
+
                     todos_los_detalles_para_excel = []
                     vistos_excel = set()
 
-                    secciones = [
-                        ("Boletín Oficial", "boletin"),
-                        ("Diputados", "diputados"),
-                        ("Senado", "senado")
-                    ]
-
-                    hay_contenido_relevante_total = False
+                    secciones = [("Boletín Oficial", "boletin"), ("Diputados", "diputados"), ("Senado", "senado")]
+                    hay_contenido = False
 
                     for titulo_seccion, key_json in secciones:
-                        bloque = data_normalizada.get(key_json, {})
+                        bloque = data_norm.get(key_json, {})
                         items = bloque.get("items", [])
                         resumen = bloque.get("resumen", "")
 
@@ -543,73 +331,60 @@ class AnalistaLegislativo:
                                 todos_los_detalles_para_excel.append(it)
                                 vistos_excel.add(id_ref)
 
-                        # FILTRO PARA EL EMAIL: Solo ALTO y MEDIO
-                        items_email = [p for p in items if p.get('impacto', 'BAJO').upper() != 'BAJO']
-
-                        if not items_email and "Sin movimientos" in resumen:
+                        items_email = [p for p in items if str(p.get("impacto", "BAJO")).upper() != "BAJO"]
+                        if not items_email:
                             continue
-                        
-                        if items_email:
-                            hay_contenido_relevante_total = True
-                            html_output += f'<div class="section-title">{titulo_seccion}</div>'
-                            
-                            if resumen:
-                                html_output += f'<div class="resumen-block">{resumen}</div>'
 
-                            orden_impacto = {"ALTO": 1, "MEDIO": 2}
-                            items_ordenados = sorted(items_email, key=lambda x: orden_impacto.get(x.get("impacto", "MEDIO"), 99))
+                        hay_contenido = True
+                        html_output += f'<div class="section-title">{titulo_seccion}</div>'
+                        if resumen:
+                            html_output += f'<div class="resumen-block">{resumen}</div>'
 
-                            for p in items_ordenados:
-                                id_ref = p.get('id_interno')
-                                meta = meta_data_por_id.get(id_ref, {})
-                                
-                                titulo_mostrar = p.get("titulo_descriptivo", meta.get("titulo", "Sin título"))
-                                link_web = meta.get("link", "#")
-                                ref = p.get('referencia', '')
-                                justificacion = p.get('justificacion', '')
-                                impacto = p.get('impacto', 'MEDIO').upper()
+                        orden = {"ALTO": 1, "MEDIO": 2}
+                        items_ordenados = sorted(items_email, key=lambda x: orden.get(str(x.get("impacto", "MEDIO")).upper(), 99))
 
-                                # Fallbacks defensivos
-                                if not ref:
-                                    ref = meta.get("referencia", "")
-                                if not link_web:
-                                    link_web = "#"
+                        for p in items_ordenados:
+                            id_ref = str(p.get("id_interno", "")).strip()
+                            meta = meta_data_por_id.get(id_ref, {})
 
-                                clase_badge = "bg-medio"
-                                if impacto == "ALTO": clase_badge = "bg-alto"
+                            titulo_mostrar = p.get("titulo_descriptivo") or meta.get("titulo") or "Sin título"
+                            ref = p.get("referencia") or meta.get("referencia") or ""
+                            link_web = meta.get("link") or "#"
+                            justificacion = p.get("justificacion", "")
+                            impacto = str(p.get("impacto", "MEDIO")).upper()
 
-                                html_output += f"""
-                                <div class="item">
-                                    <div class="badges-row">
-                                        <span class="badge bg-ref">{ref}</span>
-                                        <span class="badge {clase_badge}">IMPACTO {impacto}</span>
-                                    </div>
-                                    <div class="item-title">{titulo_mostrar}</div>
-                                    <div class="justificacion">{justificacion}</div>
-                                    <a href="{link_web}" target="_blank" class="btn-link">Ver Texto Oficial &rarr;</a>
+                            clase_badge = "bg-alto" if impacto == "ALTO" else "bg-medio"
+
+                            html_output += f"""
+                            <div class="item">
+                                <div class="badges-row">
+                                    <span class="badge bg-ref">{ref}</span>
+                                    <span class="badge {clase_badge}">IMPACTO {impacto}</span>
                                 </div>
-                                """
+                                <div class="item-title">{titulo_mostrar}</div>
+                                <div class="justificacion">{justificacion}</div>
+                                <a href="{link_web}" target="_blank" class="btn-link">Ver Texto Oficial &rarr;</a>
+                            </div>
+                            """
 
-                    if not hay_contenido_relevante_total:
+                    if not hay_contenido:
                         html_output += """
                         <div class="empty-state">
                             <span class="empty-icon">✅</span>
                             <h3>Sin Novedades de Impacto</h3>
-                            <p>Se han analizado las normas del día, pero ninguna alcanza el nivel de impacto <b>Alto</b> o <b>Medio</b> para el sector.</p>
+                            <p>No hubo items con impacto <b>Alto</b> o <b>Medio</b>.</p>
                         </div>
                         """
 
                     html_output += self._generar_html_footer()
-
                     return html_output, todos_los_detalles_para_excel
 
                 except Exception as e:
                     errores_saturacion = ["503", "overloaded", "429", "quota", "Resource has been exhausted"]
                     if any(err in str(e) for err in errores_saturacion):
                         time.sleep(5)
-                        continue 
-                    else:
-                        print(f"❌ Error modelo: {e}")
-                        break 
-        
+                        continue
+                    print(f"❌ Error modelo: {e}")
+                    break
+
         return self._generar_html_vacio("Ocurrió un error al procesar el análisis con Inteligencia Artificial."), []

@@ -1,15 +1,16 @@
 import os
 import smtplib
+from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
-from pathlib import Path
+
 
 class MensajeSender:
     def __init__(self):
         self.email_user = os.environ.get("EMAIL_USER")
         self.email_pass = os.environ.get("EMAIL_PASSWORD")
-        
+
         destinatarios_str = os.environ.get("EMAIL_DESTINATARIO", "")
         self.destinatarios = [d.strip() for d in destinatarios_str.split(",") if d.strip()]
 
@@ -22,10 +23,10 @@ class MensajeSender:
             print("❌ No hay destinatarios definidos.")
             return
 
-        # 'related' permite embebidos (cid:...) dentro del HTML.
         msg = MIMEMultipart('related')
         alt = MIMEMultipart('alternative')
         msg.attach(alt)
+
         msg['Subject'] = asunto
         msg['From'] = self.email_user
         msg['To'] = ", ".join(self.destinatarios)
@@ -34,7 +35,6 @@ class MensajeSender:
         alt.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
         alt.attach(MIMEText(contenido_html, 'html', 'utf-8'))
 
-        # Logo BBVA inline (evita "imagen rota" cuando el cliente bloquea imágenes remotas)
         logo_path = Path(__file__).resolve().parent / "assets" / "BBVA_WHITE.png"
         if logo_path.exists():
             try:

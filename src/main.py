@@ -74,15 +74,10 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
         autor = str(row['Autor'])
         fecha = str(row['Fecha de inicio'])
         proyecto = str(row['Proyecto'])
+
         link = str(row['Comisiones'])
 
-        # --- ORIGEN REAL ---
-        # - Para BO: el origen es siempre "Boletin Oficial"
-        # - Para Proyectos (PL): usar el origen detectado por el scraper (ej. Senado aunque esté en Diputados)
-        if gestor.prefijo == "BO":
-            origen_final = nombre_origen
-        else:
-            origen_final = str(row.get('Cámara de Origen') or row.get('Origen') or nombre_origen).strip() or nombre_origen
+        link_para_reporte = str(row.get('Link Texto', '')).strip() if gestor.prefijo != "BO" else link
         
         partido = str(row.get('Partido Político', ''))
         provincia = str(row.get('Provincia', ''))
@@ -99,17 +94,16 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
             if not obs_actual or "Error" in obs_actual:
                 stats["reanalizados"] += 1
 
-                # Si ya existía en la Sheet, respetar el origen guardado (columna B en Proyectos)
                 if gestor.prefijo == "BO":
-                    origen_ia = nombre_origen
+                    origen_final = nombre_origen
+                    link_reporte_final = link  
                 else:
-                    origen_ia = str(datos_viejos[1]).strip() if len(datos_viejos) > 1 else origen_final
-                    if not origen_ia:
-                        origen_ia = origen_final
+                    origen_final = str(datos_viejos[1]).strip() if len(datos_viejos) > 1 else nombre_origen
+                    link_reporte_final = ""
 
                 fila_ia = [
-                    datos_viejos[0], origen_ia, exp_web, autor,
-                    fecha, proyecto, link, 
+                    datos_viejos[0], origen_final, exp_web, autor,
+                    fecha, proyecto, link_reporte_final,
                     '','','','','' 
                 ]
                 fila_ia.append(fila_excel) 
@@ -126,6 +120,8 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
                 ]
                 rango = f"A{fila_excel}:G{fila_excel}"
             else:
+                origen_final = str(row.get('Cámara de Origen') or nombre_origen).strip() or nombre_origen
+
                 valores = [
                     id_nuevo, origen_final, exp_web, autor,
                     fecha, proyecto, link,
@@ -134,12 +130,11 @@ def procesar_lote(df_nuevos, gestor, nombre_origen, operaciones_globales, filas_
                 rango = f"A{fila_excel}:L{fila_excel}"
 
             valores = [str(x) if pd.notna(x) else "" for x in valores]
-            
             operaciones_globales.append({'range': rango, 'values': [valores]})
             
             fila_ia = [
-                id_nuevo, origen_final, exp_web, autor,
-                fecha, proyecto, link,
+                id_nuevo, origen_final if gestor.prefijo != "BO" else nombre_origen, exp_web, autor,
+                fecha, proyecto, link_para_reporte if gestor.prefijo != "BO" else link,
                 '', '', '', '', ''
             ]
             fila_ia.append(fila_excel)
@@ -170,9 +165,6 @@ if __name__ == "__main__":
         batch_proy = []
         batch_bo = []
         
-        reporte = "" 
-
-        # --- DIPUTADOS ---
         print(">>> Diputados...")
         try:
             df = ScrapearDiputados().scrape("https://www.diputados.gov.ar/proyectos/")
@@ -182,7 +174,6 @@ if __name__ == "__main__":
         except Exception as e: 
             print(f"❌ Error Diputados: {e}")
 
-        # --- SENADO ---
         print(">>> Senado...")
         try:
             df = ScrapearSenado().scrape()
@@ -192,7 +183,6 @@ if __name__ == "__main__":
         except Exception as e: 
             print(f"❌ Error Senado: {e}")
         
-        # --- BOLETIN ---
         print(">>> Boletín...")
         try:
             df = ScrapearBoletin().scrape()
