@@ -313,16 +313,17 @@ class AnalistaLegislativo:
 Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
 Analiza los siguientes items del Boletín Oficial y Congreso.
 
-OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas.
+TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno. No inventes datos.
 
 REGLA DE CLASIFICACIÓN (OBLIGATORIA):
 - Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
 - Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
+- Si el contenido parece corresponder a otra sección, IGUAL debes respetar "seccion_esperada".
 
-IMPUESTO DE SALIDA (ESTRUCTURA JSON exacta):
+SALIDA OBLIGATORIA: Devuelve SOLO un JSON válido, sin texto adicional, con esta estructura EXACTA:
 {{
   "boletin": {{
-    "resumen": "Resumen ejecutivo (máx 3 líneas).",
+    "resumen": "Resumen ejecutivo (máx 3 líneas) con lo más destacado del día, con hechos concretos.",
     "items": [
       {{
         "id_interno": "...",
@@ -335,24 +336,53 @@ IMPUESTO DE SALIDA (ESTRUCTURA JSON exacta):
     ]
   }},
   "diputados": {{
-    "resumen": "Resumen ejecutivo (máx 3 líneas).",
+    "resumen": "Resumen ejecutivo (máx 3 líneas) de actividad parlamentaria.",
     "items": []
   }},
   "senado": {{
-    "resumen": "Resumen ejecutivo (máx 3 líneas).",
+    "resumen": "Resumen ejecutivo (máx 3 líneas) de actividad parlamentaria.",
     "items": []
   }}
 }}
 
-REGLAS DE IMPACTO (OBLIGATORIAS):
-- "impacto_nivel" SOLO puede ser: "ALTO", "MEDIO" o "BAJO". Sin texto adicional.
-- Las categorías van SOLO en "categorias".
-- "categorias" debe ser una lista de 1 a 4 strings, con inicial en mayúscula (ej: "Laboral").
+INSTRUCCIONES DE REDACCIÓN (OBLIGATORIAS):
+1) "titulo_descriptivo" (titular periodístico breve)
+- Si es NOMBRAMIENTO/DESIGNACIÓN: "Designación de [APELLIDO] en [ORGANISMO]" o "Designación de [NOMBRE] como [CARGO] en [ORGANISMO]".
+- Si es RENUNCIA/ACEPTACIÓN DE RENUNCIA/CESE: "Renuncia de [APELLIDO] a [CARGO] en [ORGANISMO]" o "Aceptan renuncia de [NOMBRE] como [CARGO] en [ORGANISMO]".
+- Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL]" (ej: Impuestos, Regulación financiera, Energía, Salud).
+- Elimina códigos burocráticos (ej: "RESOL-2026-...") salvo que sea imprescindible para identificar la norma.
+- No uses "IMPACTO ..." dentro del título.
 
-ESTILO DE JUSTIFICACIÓN:
+2) "justificacion" (análisis)
 - Máximo 2 líneas.
-- Decisiones/regulación: explicar qué cambia (montos, plazos, alcance, sanción, alta/baja, etc.).
-- Proyectos: explicar el efecto potencial si avanzara.
+- Debe explicar QUÉ pasa y POR QUÉ importa. Nada de frases vacías tipo "impacta el sector".
+- PARA NOMBRAMIENTOS O RENUNCIAS: debes mencionar explícitamente el NOMBRE COMPLETO y el CARGO EXACTO (y si aplica, "acepta renuncia", "cesa funciones", "designa en reemplazo de").
+- PARA NORMATIVAS: detalla lo concreto: montos, plazos, tasas, alcance, sanciones, artículos/leyes relevantes. Si no está en el texto, NO lo inventes.
+
+REGLAS DE IMPACTO (OBLIGATORIAS):
+- "impacto_nivel" SOLO puede ser: "ALTO", "MEDIO" o "BAJO" (sin texto adicional).
+- REGLA DEL JEFE (OBLIGATORIA):
+  - Toda RENUNCIA/ACEPTACIÓN DE RENUNCIA/CESE de funcionarios debe ser "ALTO".
+  - Toda DESIGNACIÓN/NOMBRAMIENTO de funcionarios debe ser "ALTO".
+- Además, clasifica como ALTO:
+  - Normas vigentes o medidas con impacto financiero/cambiario/impositivo/lavado/seguridad informática.
+  - Todo lo emanado por: BCRA, CNV, UIF, ARCA (ex AFIP), Secretaría de Comercio, Ministerio de Economía, Jefatura de Gabinete, ENRE/ENARGAS cuando afecte tarifas/mercado.
+- MEDIO:
+  - Designaciones/renuncias menores NO deben ir aquí (por regla, van a ALTO).
+  - Normas sectoriales específicas con alcance acotado; comunicaciones administrativas relevantes pero no críticas.
+- BAJO:
+  - Declaraciones de interés/efemérides/premios/becas; temas culturales sin efecto regulatorio directo.
+  - Multas o sanciones menores a particulares sin relevancia sistémica.
+
+CATEGORÍAS:
+- "categorias" va SOLO aquí (nunca dentro de impacto_nivel).
+- Lista de 1 a 4 categorías, con inicial en mayúscula (ej: "Financiero", "Fiscal", "Laboral", "Gremial", "Salud", "Energía", "Infraestructura", "Administrativo", "Comercio exterior", "Seguridad", "Transparencia").
+- Elegí categorías que describan el tema principal (no más de 4).
+
+CONTROL DE CALIDAD (OBLIGATORIO):
+- No repitas exactamente el texto del input.
+- No uses "podría", "probablemente" salvo que el texto lo indique. Priorizá hechos.
+- No inventes nombres/cargos/valores: si falta el dato, decí "No especifica" en la justificación.
 
 Datos a analizar:
 {json.dumps(items_para_modelo, ensure_ascii=False)}
