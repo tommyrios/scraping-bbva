@@ -5,7 +5,7 @@ from typing import List, Tuple, Dict, Any
 from google import genai
 from google.genai import types
 
-from reporte_ui import ReporteUI
+from reporte import ReporteUI
 
 class AnalistaLegislativo:
     def __init__(self):
