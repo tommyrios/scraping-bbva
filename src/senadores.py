@@ -1,350 +1,259 @@
 import time
-import traceback
 import re
 import requests
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
+
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select
 from bs4 import BeautifulSoup
 
+
 class ScrapearSenado:
+    BASE_URL = "https://www.senado.gob.ar"
 
     def __init__(self):
         print("Inicializando robot Senado...")
         options = Options()
-        options.add_argument('--headless') 
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--window-size=1920,1080')
-        options.add_argument('--ignore-certificate-errors')
-        options.add_argument("user-agent=Mozilla/5.0 (Windows...37.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
-
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument(
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        )
+        options.page_load_strategy = "eager"
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
         self.data = []
-        self.mapa_datos_senadores = {} 
+        self.mapa_datos_senadores = {}
         self._session = requests.Session()
         self._session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
         })
 
-    BASE_SENADO = "https://www.senado.gob.ar"
-
-    def _es_pdf(self, resp) -> bool:
-        try:
-            ctype = (resp.headers.get("Content-Type") or "").lower()
-            cdisp = (resp.headers.get("Content-Disposition") or "").lower()
-            return ("application/pdf" in ctype) or ("pdf" in cdisp) or ctype.endswith("/pdf")
-        except Exception:
-            return False
-
-    def _extraer_url_desde_onclick(self, onclick: str) -> str:
-        if not onclick:
-            return ""
-        m = re.search(r"""['"]([^'"]+)['"]""", onclick)
-        return m.group(1).strip() if m else ""
-
-    def _buscar_link_texto_original_en_html(self, soup: BeautifulSoup) -> str:
-        for a in soup.find_all("a"):
-            label = " ".join(a.stripped_strings).strip().lower()
-            if "texto original" not in label:
-                continue
-            href = (a.get("href") or "").strip()
-            if href:
-                return href
-            onclick = (a.get("onclick") or "").strip()
-            if onclick:
-                u = self._extraer_url_desde_onclick(onclick)
-                if u:
-                    return u
-
-        for el in soup.find_all(["button", "input", "span", "div"]):
-            onclick = (el.get("onclick") or "").strip()
-            if onclick and ("texto" in onclick.lower() and "original" in onclick.lower()):
-                u = self._extraer_url_desde_onclick(onclick)
-                if u:
-                    return u
-
-        for a in soup.find_all("a", href=True):
-            href = (a.get("href") or "").strip()
-            if href.lower().endswith(".pdf"):
-                return href
-        return ""
-
-    def _candidatos_descarga_desde_verexp(self, verexp_url: str) -> list:
-        try:
-            path = urlparse(verexp_url).path.strip("/")
-            parts = path.split("/")
-            if "verExp" not in parts:
-                return []
-            i = parts.index("verExp")
-            if len(parts) <= i + 3:
-                return []
-            exp_id = parts[i + 1]
-            cam = parts[i + 2]
-            tipo = parts[i + 3]
-            base = self.BASE_SENADO
-            return [
-                f"{base}/parlamentario/comisiones/verTextoOriginal/{exp_id}/{cam}/{tipo}",
-                f"{base}/parlamentario/comisiones/verTextoOriginalPdf/{exp_id}/{cam}/{tipo}",
-                f"{base}/parlamentario/comisiones/verTexto/{exp_id}/{cam}/{tipo}",
-                f"{base}/parlamentario/comisiones/textoOriginal/{exp_id}/{cam}/{tipo}",
-                f"{base}/parlamentario/comisiones/descargarTextoOriginal/{exp_id}/{cam}/{tipo}",
-                f"{base}/parlamentario/comisiones/downloadTextoOriginal/{exp_id}/{cam}/{tipo}",
-            ]
-        except Exception:
-            return []
-
-    def get_link_texto_original(self, verexp_url: str, soup_detalle: BeautifulSoup = None) -> str:
-        """Devuelve un link al PDF (texto original) si puede; fallback: verExp_url."""
-        if not verexp_url:
-            return ""
-
-        # 1) Desde HTML (href u onclick)
-        try:
-            if soup_detalle is None:
-                r = self._session.get(verexp_url, timeout=25)
-                if r.status_code == 200:
-                    soup_detalle = BeautifulSoup(r.text, "html.parser")
-
-            if soup_detalle is not None:
-                raw = self._buscar_link_texto_original_en_html(soup_detalle)
-                if raw:
-                    candidato = urljoin(self.BASE_SENADO, raw)
-                    try:
-                        rr = self._session.get(candidato, timeout=25, allow_redirects=True)
-                        if rr.status_code == 200 and self._es_pdf(rr):
-                            return rr.url
-                    except Exception:
-                        return candidato
-        except Exception:
-            pass
-
-        for cand in self._candidatos_descarga_desde_verexp(verexp_url):
-            try:
-                rr = self._session.get(cand, timeout=25, allow_redirects=True)
-                if rr.status_code == 200 and self._es_pdf(rr):
-                    return rr.url
-            except Exception:
-                continue
-
-        return verexp_url
-
     def limpiar_texto(self, texto):
-        if not texto: return "S/D"
-        return " ".join(texto.split())
+        if not texto:
+            return "S/D"
+        t = " ".join(str(texto).split()).strip()
+        return t if t else "S/D"
 
     def obtener_diccionario_partidos(self):
-        url_lista = "https://www.senado.gob.ar/senadores/listados/listaSenadoRes"
+        url_lista = f"{self.BASE_URL}/senadores/listados/listaSenadoRes"
         print(f"Mapeando senadores desde {url_lista}")
-        
         try:
             self.driver.get(url_lista)
-            WebDriverWait(self.driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            tabla = soup.find('table', id='senadoresTabla')
-            
-            if not tabla: return
+            WebDriverWait(self.driver, 20).until(lambda d: "<table" in (d.page_source or "").lower())
+            soup = BeautifulSoup(self.driver.page_source, "html.parser")
+            tabla = soup.find("table", id="senadoresTabla") or soup.find("table")
+            if not tabla:
+                return
+            tbody = tabla.find("tbody") or tabla
+            for tr in tbody.find_all("tr"):
+                tds = tr.find_all("td")
+                if len(tds) < 3:
+                    continue
+                nombre = self.limpiar_texto(tds[0].get_text())
+                provincia = self.limpiar_texto(tds[1].get_text())
+                partido = self.limpiar_texto(tds[2].get_text())
+                if nombre and nombre != "S/D":
+                    self.mapa_datos_senadores[nombre] = {"provincia": provincia, "partido": partido}
+        except Exception:
+            return
 
-            filas = tabla.find('tbody').find_all('tr')
-            
-            for fila in filas:
-                cols = fila.find_all('td')
-                if len(cols) < 5: continue
-
-                nombre = self.limpiar_texto(cols[0].text)
-                provincia = self.limpiar_texto(cols[1].text)
-                partido = self.limpiar_texto(cols[2].text)
-                
-                self.mapa_datos_senadores[nombre] = {'provincia': provincia, 'partido': partido}
-
-        except Exception as e:
-            print(f"Error al obtener diccionario de senadores: {e}")
-
-    def extraer_detalle_proyecto(self, url):
+    def _formatear_expediente(self, exp: str, tipo: str) -> str:
+        exp = self.limpiar_texto(exp)
+        tipo = self.limpiar_texto(tipo)
+        if exp == "S/D" or tipo == "S/D":
+            return exp
         try:
-            self.driver.get(url)
-            WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.TAG_NAME, "h1"))
-            )
-            
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            if "/" in exp:
+                n, anio = exp.split("/", 1)
+                anio2 = anio[-2:] if len(anio) >= 2 else anio
+                return f"{n}-{tipo}-{anio2}"
+        except Exception:
+            pass
+        return exp
 
-            proyecto_texto = "S/D"
-            try:
-                tabla_encabezado = soup.find('table', class_='table-bordered')
-                if tabla_encabezado:
-                    filas = tabla_encabezado.find('tbody').find_all('tr')
-                    for f in filas:
-                        cols = f.find_all('td')
-                        if len(cols) >= 4:
-                            texto_crudo = self.limpiar_texto(cols[3].text)
-                            if ":" in texto_crudo:
-                                partes = texto_crudo.split(":", 1)
-                                if len(partes) > 1:
-                                    proyecto_texto = partes[1].strip()
-                                else:
-                                    proyecto_texto = texto_crudo
-                            else:
-                                proyecto_texto = texto_crudo
-            except: pass
+    def _extraer_items_listado(self, soup_listado: BeautifulSoup):
+        items = []
+        for a in soup_listado.find_all("a", href=True):
+            href = (a.get("href") or "").strip()
+            if "verExp" not in href:
+                continue
+            tr = a.find_parent("tr")
+            if not tr:
+                continue
+            tds = tr.find_all("td")
+            if len(tds) < 4:
+                continue
+            exp_raw = self.limpiar_texto(a.get_text())
+            tipo = self.limpiar_texto(tds[1].get_text())
+            origen_sigla = self.limpiar_texto(tds[2].get_text())
+            extracto = self.limpiar_texto(tds[3].get_text())
+            url_detalle = urljoin(self.BASE_URL, href)
+            expediente_id = self._formatear_expediente(exp_raw, tipo)
+            items.append({
+                "url_detalle": url_detalle,
+                "expediente_raw": exp_raw,
+                "expediente_id": expediente_id,
+                "tipo": tipo,
+                "origen_sigla": origen_sigla,
+                "extracto": extracto
+            })
+        uniq = {}
+        for it in items:
+            uniq[it["url_detalle"]] = it
+        return list(uniq.values())
 
-            autor_principal = "S/D"
-            try:
-                div_autores = soup.find('div', class_='tab-pane', id='autores')
-                
-                if div_autores:
-                    link_autor = div_autores.find('a', href=True)
-                    
-                    raw_text = ""
-                    if link_autor:
-                        if link_autor.has_attr('title') and link_autor['title']:
-                            raw_text = link_autor['title'].strip()
-                        else:
-                            raw_text = self.limpiar_texto(link_autor.text)
-                    else:
-                        td = div_autores.find('td')
-                        if td:
-                            raw_text = self.limpiar_texto(td.text)
-                    
-                    autor_principal = raw_text if raw_text else "S/D"
-            except: pass
+    def _get_autores(self, soup_det: BeautifulSoup):
+        autores_div = soup_det.find("div", {"role": "tabpanel", "id": "Autores"}) or soup_det.find(id=re.compile(r"^Autores$", re.IGNORECASE))
+        if not autores_div:
+            return ["S/D"]
+        autores = []
+        for a in autores_div.find_all("a", href=True):
+            title = (a.get("title") or "").strip()
+            txt = self.limpiar_texto(a.get_text())
+            cand = self.limpiar_texto(title or txt)
+            if cand and cand != "S/D":
+                autores.append(cand)
+        return autores if autores else ["S/D"]
 
-            fecha = "S/D"
-            try:
-                tabla_encabezado = soup.find('table', class_='table-bordered')
-                if tabla_encabezado:
-                    filas = tabla_encabezado.find('tbody').find_all('tr')
-                    for f in filas:
-                        cols = f.find_all('td')
-                        if len(cols) >= 2:
-                            etiqueta = self.limpiar_texto(cols[0].text).lower()
-                            if "fecha" in etiqueta:
-                                fecha = self.limpiar_texto(cols[1].text)
-            except: pass
+    def _get_fecha_inicio(self, soup_det: BeautifulSoup):
+        h2 = soup_det.find(lambda tag: tag.name in ("h2", "h3") and "mesa de entradas" in tag.get_text(strip=True).lower())
+        if not h2:
+            return "S/D"
+        tabla = h2.find_next("table")
+        if not tabla:
+            return "S/D"
+        tr = (tabla.find("tbody") or tabla).find("tr")
+        if not tr:
+            return "S/D"
+        tds = tr.find_all("td")
+        if not tds:
+            return "S/D"
+        return self.limpiar_texto(tds[0].get_text())
 
-            comisiones_final = "S/D"
-            try:
-                div_giro = soup.find('div', class_='tab-pane', id='giro')
-                if div_giro:
-                    tabla = div_giro.find('table')
-                    if tabla:
-                        filas = tabla.find_all('tr')
-                        comisiones = []
-                        for f in filas:
-                            cols = f.find_all('td')
-                            if cols:
-                                com = self.limpiar_texto(cols[0].text)
-                                if com and com != "S/D":
-                                    comisiones.append(com)
-                        if comisiones:
-                            comisiones_final = ", ".join(comisiones)
-            except: pass
+    def _get_comisiones(self, soup_det: BeautifulSoup):
+        h2 = soup_det.find(lambda tag: tag.name in ("h2", "h3", "h4") and "giros del expediente a comisiones" in tag.get_text(strip=True).lower())
+        if not h2:
+            return "S/D"
+        tabla = h2.find_next("table")
+        if not tabla:
+            return "S/D"
+        filas = (tabla.find("tbody") or tabla).find_all("tr")
+        coms = []
+        for f in filas:
+            tds = f.find_all("td")
+            if not tds:
+                continue
+            raw = self.limpiar_texto(tds[0].get_text(" ", strip=True))
+            raw = re.split(r"\bORDEN DE GIRO\b", raw, flags=re.IGNORECASE)[0].strip()
+            if raw and raw != "S/D":
+                coms.append(raw)
+        return ", ".join(coms) if coms else "S/D"
 
-            link_texto = self.get_link_texto_original(url, soup_detalle=soup)
+    def _get_proyecto(self, soup_det: BeautifulSoup, fallback_extracto="S/D"):
+        tabla = soup_det.find("table", class_=re.compile(r"table-bordered"))
+        if not tabla:
+            return fallback_extracto
+        tr = (tabla.find("tbody") or tabla).find("tr")
+        if not tr:
+            return fallback_extracto
+        tds = tr.find_all("td")
+        if len(tds) >= 4:
+            return self.limpiar_texto(tds[3].get_text())
+        return fallback_extracto
 
+    def _get_link_texto_original(self, soup_det: BeautifulSoup, url_detalle: str):
+        div = soup_det.find(id=re.compile(r"textoOriginal", re.IGNORECASE))
+        if div:
+            a = div.find("a", href=True)
+            if a:
+                href = (a.get("href") or "").strip()
+                if href:
+                    return urljoin(self.BASE_URL, href)
+        for a in soup_det.find_all("a", href=True):
+            href = (a.get("href") or "").strip()
+            if "downloadpdf" in href.lower():
+                return urljoin(self.BASE_URL, href)
+        return url_detalle
+
+    def extraer_detalle_proyecto(self, url_detalle: str, fallback_extracto="S/D"):
+        try:
+            r = self._session.get(url_detalle, timeout=30, allow_redirects=True)
+            if r.status_code != 200:
+                return None
+            soup = BeautifulSoup(r.text, "html.parser")
+            autores = self._get_autores(soup)
+            autor_principal = autores[0] if autores else "S/D"
+            if autores and len(autores) > 1 and autor_principal != "S/D":
+                autor_principal = f"{autor_principal} Y OTROS"
+            fecha_inicio = self._get_fecha_inicio(soup)
+            proyecto = self._get_proyecto(soup, fallback_extracto=fallback_extracto)
+            comisiones = self._get_comisiones(soup)
+            link_texto = self._get_link_texto_original(soup, url_detalle)
             return {
-                'Proyecto': proyecto_texto,
-                'Autor': autor_principal,
-                'Fecha de inicio': fecha,
-                'Comisiones': comisiones_final,
-                'Link Texto': link_texto
+                "Autor": autor_principal,
+                "Fecha de inicio": fecha_inicio,
+                "Proyecto": proyecto,
+                "Comisiones": comisiones,
+                "Link Texto": link_texto
             }
-
         except Exception:
             return None
 
-    def scrape(self):
+    def scrape(self, url_listado):
         self.obtener_diccionario_partidos()
-
-        url_inicio = "https://www.senado.gob.ar/parlamentario/comisiones/comisiones"
-        print(f"Entrando a {url_inicio}")
-
+        print(f"Entrando a {url_listado}")
         try:
-            self.driver.get(url_inicio)
-
-            wait = WebDriverWait(self.driver, 20)
-            dropdown = wait.until(EC.presence_of_element_located((By.ID, "strCantPagina")))
-            select = Select(dropdown)
-            select.select_by_value("100")
-
-            time.sleep(2)
-
-            boton = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@value='Buscar']")))
-            self.driver.execute_script("arguments[0].click();", boton)
-
-            wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-            time.sleep(2)
-
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            filas = soup.find_all('tr')
-            items_a_procesar = []
-
-            for fila in filas:
-                cols = fila.find_all('td')
-                if len(cols) < 2: continue
-
-                enlace = cols[0].find('a', href=True)
-                if not enlace or 'verExp' not in enlace['href']: continue
-
-                url_completa = f"https://www.senado.gob.ar{enlace['href']}"
-                
-                texto_numero = self.limpiar_texto(enlace.text)
-                texto_tipo = self.limpiar_texto(cols[1].text)
-                
-                id_formateado = texto_numero 
-                try:
-                    if "/" in texto_numero:
-                        partes = texto_numero.split('/')
-                        id_formateado = f"{partes[0]}-{texto_tipo}-{partes[1]}"
-                except: pass
-                
-                items_a_procesar.append({'url': url_completa, 'id': id_formateado})
-
-            items_unicos = {item['url']: item for item in items_a_procesar}.values()
-            print(f"Se encontraron {len(items_unicos)} proyectos únicos.")
-
-        except Exception as e:
-            print(f"Error critico en navegacion: {e}")
+            self.driver.get(url_listado)
+            WebDriverWait(self.driver, 30).until(lambda d: ("verExp" in (d.page_source or "")) or ("<table" in (d.page_source or "").lower()))
+            soup_listado = BeautifulSoup(self.driver.page_source, "html.parser")
+            items = self._extraer_items_listado(soup_listado)
+            if not items:
+                self.driver.quit()
+                return pd.DataFrame(self.data)
+        except Exception:
             self.driver.quit()
-            return pd.DataFrame()
+            return pd.DataFrame(self.data)
 
-        for i, item in enumerate(items_unicos): 
-            info = self.extraer_detalle_proyecto(item['url'])
-            
-            if info:
-                autor_para_mostrar = info['Autor']
-                autor_para_buscar = autor_para_mostrar
+        for it in items:
+            info = self.extraer_detalle_proyecto(it["url_detalle"], fallback_extracto=it.get("extracto", "S/D"))
+            if not info:
+                continue
 
-                if "," in autor_para_mostrar:
-                    partes = autor_para_mostrar.split(",")
-                    if len(partes) == 2:
-                        autor_para_buscar = f"{partes[1].strip()} {partes[0].strip()}"
-                
-                datos_extra = self.mapa_datos_senadores.get(autor_para_buscar, {'partido': '', 'provincia': ''})
+            autor_para_mostrar = info.get("Autor", "S/D") or "S/D"
+            autor_para_buscar = autor_para_mostrar.replace(" Y OTROS", "").strip()
 
-                self.data.append({
-                    'Cámara de Origen': 'Senado',
-                    'Expediente': item['id'],
-                    'Autor': autor_para_mostrar,
-                    'Fecha de inicio': info['Fecha de inicio'],
-                    'Proyecto': info['Proyecto'],
-                    'Comisiones': info['Comisiones'],
-                    'Link Texto': info.get('Link Texto', ''),
-                    'Estado': '',
-                    'Probabilidad': '',
-                    'Partido Político': datos_extra['partido'],
-                    'Provincia': datos_extra['provincia'],
-                    'Observaciones': ''
-                })
-                time.sleep(0.5)
+            if "," in autor_para_buscar:
+                partes = autor_para_buscar.split(",", 1)
+                if len(partes) == 2:
+                    autor_para_buscar = f"{partes[1].strip()} {partes[0].strip()}"
+
+            datos_extra = self.mapa_datos_senadores.get(autor_para_buscar, {"partido": "", "provincia": ""})
+
+            self.data.append({
+                "Cámara de Origen": "Senado",
+                "Expediente": it.get("expediente_id", "S/D"),
+                "Autor": autor_para_mostrar,
+                "Fecha de inicio": info.get("Fecha de inicio", "S/D"),
+                "Proyecto": info.get("Proyecto", "S/D"),
+                "Comisiones": info.get("Comisiones", "S/D"),
+                "Link Texto": info.get("Link Texto", it["url_detalle"]),
+                "Estado": "",
+                "Probabilidad": "",
+                "Partido Político": datos_extra.get("partido", ""),
+                "Provincia": datos_extra.get("provincia", ""),
+                "Observaciones": ""
+            })
+
+            time.sleep(0.25)
 
         self.driver.quit()
         return pd.DataFrame(self.data)
