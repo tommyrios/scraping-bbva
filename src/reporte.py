@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Any
 
 
 @dataclass(frozen=True)
@@ -10,6 +10,17 @@ class Seccion:
 
 class ReporteUI:
     LOGO_CID = "cid:bbva_logo"
+
+    COLOR_NAVY = "#072146"
+    COLOR_LINK = "#004481"
+
+    COLOR_ALTO = "#ED2B3B"
+    COLOR_MEDIO = "#FFE761"
+    COLOR_MEDIO_TEXT = "#FFFFFF"
+
+    COLOR_MANDARIN = "#FFB56B"
+    COLOR_LIME = "#88E783"
+    COLOR_ICE = "#8BE1E9"
 
     def __init__(self, year_footer: int = 2026):
         self.year_footer = year_footer
@@ -25,9 +36,11 @@ class ReporteUI:
 <head>
 <meta charset="utf-8">
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Source+Serif+4:wght@700;800&display=swap');
+
   body {{
-    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
-    color: #1f2937;
+    font-family: 'Lato', Arial, Helvetica, sans-serif;
+    color: #1F2937;
     line-height: 1.6;
     background-color: #ffffff;
     margin: 0;
@@ -39,8 +52,9 @@ class ReporteUI:
     margin: 0;
     background: #ffffff;
   }}
+
   .header {{
-    background-color: #072146;
+    background-color: {self.COLOR_NAVY};
     color: #ffffff;
     padding: 30px 5%;
   }}
@@ -63,118 +77,97 @@ class ReporteUI:
   }}
   .header h1 {{
     margin: 0;
-    font-size: 26px;
-    font-weight: 600;
+    font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    font-size: 28px;
+    font-weight: 800;
     letter-spacing: 0.2px;
     color: #ffffff;
   }}
   .header h2 {{
     margin: 8px 0 0;
     font-size: 12px;
-    opacity: 0.85;
-    font-weight: 600;
+    opacity: 0.9;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 2px;
     color: #85C8FF;
   }}
+
   .content {{
-    padding: 34px 5% 40px 5%;
+    padding: 30px 5% 40px 5%;
     background-color: #ffffff;
   }}
 
   .toc {{
-    background: #F7F8FA;
-    border: 1px solid #E6E8EE;
-    border-radius: 10px;
+    background: #F7F9FC;
+    border: 1px solid #DCE3EF;
+    border-radius: 12px;
     padding: 14px 16px;
-    margin: 0 0 18px 0;
+    margin: 0 0 20px 0;
   }}
   .toc-title {{
-    font-weight: 700;
-    color: #072146;
+    font-weight: 900;
+    color: {self.COLOR_NAVY};
     font-size: 13px;
     margin: 0 0 10px 0;
   }}
   .toc a {{
     text-decoration: none;
-    font-weight: 700;
+    font-weight: 900;
     font-size: 13px;
     margin-right: 14px;
     display: inline-block;
     margin-bottom: 6px;
-    color: #004481;
-  }}
-  .toc-muted {{
-    color: #5b6472;
-    font-size: 12px;
-    margin-top: 8px;
+    color: {self.COLOR_LINK};
   }}
 
   .section-separator {{
-    border-top: 6px solid #072146;
-    margin: 44px 0 18px 0;
+    border-top: 7px solid {self.COLOR_NAVY};
+    margin: 46px 0 18px 0;
     padding-top: 10px;
   }}
+
   .section-banner {{
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 18px 18px;
     margin: 0 0 22px 0;
-    border-left: 10px solid #072146;
-    background: #F4F8FB;
+    border: 1px solid #DCE3EF;
+    background: #FFFFFF;
+  }}
+  .section-bar {{
+    height: 7px;
+    border-radius: 999px;
+    margin: 0 0 12px 0;
   }}
   .section-kicker {{
     margin: 0;
     font-size: 12px;
-    font-weight: 800;
+    font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 1.6px;
-    color: #072146;
+    color: #0B1220;
   }}
   .section-sub {{
     margin-top: 6px;
     font-size: 12px;
-    color: #495163;
-  }}
-
-  .banner-boletin {{
-    background: #F4F8FB;
-    border-left-color: #001391;
-  }}
-  .banner-boletin .section-kicker {{
-    color: #001391;
-  }}
-
-  .banner-diputados {{
-    background: #F4F8FB;
-    border-left-color: #004481;
-  }}
-  .banner-diputados .section-kicker {{
-    color: #004481;
-  }}
-
-  .banner-senado {{
-    background: #F4F8FB;
-    border-left-color: #060E46;
-  }}
-  .banner-senado .section-kicker {{
-    color: #060E46;
+    color: #4B5563;
   }}
 
   .resumen-block {{
     background-color: #F4F8FB;
-    border-left: 5px solid #004481;
+    border: 1px solid #DCE3EF;
+    border-left: 6px solid {self.COLOR_LINK};
     padding: 18px 18px;
     margin: 0 0 26px 0;
-    font-style: italic;
     color: #334155;
     font-size: 14px;
-    border-radius: 8px;
+    border-radius: 10px;
   }}
 
   .item {{
     margin-bottom: 34px;
     padding-bottom: 24px;
-    border-bottom: 1px solid #E6E8EE;
+    border-bottom: 1px solid #DCE3EF;
   }}
   .item:last-child {{ border-bottom: none; }}
 
@@ -182,9 +175,9 @@ class ReporteUI:
 
   .badge {{
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 11px;
-    font-weight: 800;
+    font-weight: 900;
     text-transform: uppercase;
     display: inline-block;
     vertical-align: middle;
@@ -192,28 +185,28 @@ class ReporteUI:
     margin-bottom: 6px;
   }}
   .bg-ref {{
-    background-color: #F2F3F6;
-    color: #4B5563;
-    border: 1px solid #E6E8EE;
+    background-color: #F1F5F9;
+    color: #475569;
+    border: 1px solid #DCE3EF;
   }}
   .bg-alto {{
-    background-color: #7A1E2B;
+    background-color: {self.COLOR_ALTO};
     color: #ffffff;
   }}
   .bg-medio {{
-    background-color: #C79A2B;
-    color: #111827;
+    background-color: {self.COLOR_MEDIO};
+    color: {self.COLOR_MEDIO_TEXT};
   }}
   .bg-bajo {{
     background-color: #E8F0FE;
-    color: #072146;
+    color: {self.COLOR_NAVY};
     border: 1px solid #D7E9F7;
   }}
 
   .item-title {{
     font-size: 18px;
-    font-weight: 800;
-    color: #111827;
+    font-weight: 900;
+    color: #0B1220;
     margin: 0 0 8px 0;
     line-height: 1.35;
   }}
@@ -234,13 +227,14 @@ class ReporteUI:
   .btn-link {{
     display: inline-block;
     font-size: 12px;
-    color: #004481;
+    color: {self.COLOR_LINK};
     text-decoration: none;
-    font-weight: 800;
-    border: 2px solid #004481;
+    font-weight: 900;
+    border: 2px solid {self.COLOR_LINK};
     padding: 10px 16px;
-    border-radius: 8px;
+    border-radius: 10px;
     text-transform: uppercase;
+    background: #FFFFFF;
   }}
 
   .back-to-index {{
@@ -249,8 +243,8 @@ class ReporteUI:
   }}
   .back-to-index a {{
     font-size: 12px;
-    font-weight: 800;
-    color: #004481;
+    font-weight: 900;
+    color: {self.COLOR_LINK};
     text-decoration: none;
   }}
 
@@ -261,12 +255,12 @@ class ReporteUI:
   }}
 
   .footer {{
-    background-color: #F7F8FA;
+    background-color: #F7F9FC;
     padding: 26px 5%;
     text-align: center;
     font-size: 12px;
     color: #6B7280;
-    border-top: 1px solid #E6E8EE;
+    border-top: 1px solid #DCE3EF;
   }}
 </style>
 </head>
@@ -288,7 +282,7 @@ class ReporteUI:
         return f"""
     </div>
     <div class="footer">
-      &copy; {self.year_footer} BBVA Argentina • Reporte generado por Gemini
+      © {self.year_footer} BBVA Argentina • Reporte generado por Gemini
     </div>
   </div>
 </body>
@@ -298,19 +292,19 @@ class ReporteUI:
     def empty(self, mensaje: str) -> str:
         return self.header() + f"""
   <div class="empty-state">
-    <h3 style="margin:0 0 8px 0;color:#072146;">Sin Novedades</h3>
+    <h3 style="margin:0 0 8px 0;color:{self.COLOR_NAVY};font-weight:900;">Sin Novedades</h3>
     <p style="margin:0;">{mensaje}</p>
   </div>
 """ + self.footer()
 
-    def _banner_class(self, key: str) -> str:
+    def _section_color(self, key: str) -> str:
         if key == "boletin":
-            return "section-banner banner-boletin"
+            return self.COLOR_MANDARIN
         if key == "diputados":
-            return "section-banner banner-diputados"
+            return self.COLOR_LIME
         if key == "senado":
-            return "section-banner banner-senado"
-        return "section-banner"
+            return self.COLOR_ICE
+        return self.COLOR_NAVY
 
     def _toc(self, counts: Dict[str, int]) -> str:
         parts = ['<a name="top" id="top"></a>', '<div class="toc">', '<div class="toc-title">Índice</div>']
@@ -326,11 +320,12 @@ class ReporteUI:
         return '<div class="section-separator"></div>'
 
     def _section_header(self, key: str, titulo: str, count: int, subtitle: str) -> str:
-        banner_cls = self._banner_class(key)
+        color = self._section_color(key)
         return f"""
 {self._separator()}
 <a name="sec-{key}" id="sec-{key}"></a>
-<div class="{banner_cls}">
+<div class="section-banner">
+  <div class="section-bar" style="background:{color};"></div>
   <div class="section-kicker">{titulo} • {count} ítems</div>
   <div class="section-sub">{subtitle}</div>
 </div>
@@ -361,11 +356,10 @@ class ReporteUI:
         html += self._toc(counts)
 
         hay_contenido = any((counts.get(sec.key, 0) or 0) > 0 for sec in self.secciones)
-
         if not hay_contenido:
             html += """
   <div class="empty-state">
-    <h3 style="margin:0 0 8px 0;color:#072146;">Sin Novedades de Impacto</h3>
+    <h3 style="margin:0 0 8px 0;color:#072146;font-weight:900;">Sin Novedades de Impacto</h3>
     <p style="margin:0;">No hubo ítems con impacto Alto o Medio.</p>
   </div>
 """
@@ -434,7 +428,7 @@ class ReporteUI:
 </div>
 """
 
-            html += f"""
+            html += """
 <div class="back-to-index">
   <a href="#top">Volver al índice</a>
 </div>
