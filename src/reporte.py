@@ -288,7 +288,7 @@ class ReporteUI:
         return f"""
     </div>
     <div class="footer">
-      &copy; {self.year_footer} BBVA Argentina • Generado por Inteligencia Artificial (Gemini)
+      &copy; {self.year_footer} BBVA Argentina • Reporte generado por Gemini
     </div>
   </div>
 </body>
