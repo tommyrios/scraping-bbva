@@ -1,18 +1,17 @@
 import os
 import json
 import time
-from typing import List, Tuple, Dict, Any
 from google import genai
 from google.genai import types
 
 from reporte import ReporteUI
 
+
 class AnalistaLegislativo:
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key) if api_key else None
-
-        self.ui = ReporteUI(logo_cid="cid:bbva_logo")
+        self.ui = ReporteUI(year_footer=2026)
 
     def generar_link(self, origen, expediente):
         exp = (expediente or "").strip()
@@ -27,18 +26,6 @@ class AnalistaLegislativo:
             return f"https://www.google.com/search?q=site:boletinoficial.gob.ar+%22{exp}%22"
         return f"https://www.google.com/search?q=%22{exp}%22"
 
-    def _generar_html_vacio(self, mensaje="Sin novedades relevantes en esta ejecución."):
-        return f"""
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="font-family:Segoe UI,Roboto,Arial,sans-serif; color:#333;">
-  <div style="max-width:900px;margin:0 auto;padding:24px;">
-    <h2>Reporte Regulatorio Diario</h2>
-    <p>{mensaje}</p>
-  </div>
-</body></html>
-"""
-
     def _seccion_esperada(self, origen: str, id_interno: str) -> str:
         o = (origen or "").lower()
         if "boletin" in o or str(id_interno).startswith("BO"):
@@ -52,7 +39,9 @@ class AnalistaLegislativo:
         for lvl in ("ALTO", "MEDIO", "BAJO"):
             if lvl in val:
                 return lvl
-        return val if val in ("ALTO", "MEDIO", "BAJO") else "BAJO"
+        if val not in ("ALTO", "MEDIO", "BAJO"):
+            return "BAJO"
+        return val
 
     def _normalizar_categorias(self, item: dict) -> list:
         cats = item.get("categorias", [])
@@ -82,20 +71,13 @@ class AnalistaLegislativo:
                 break
         return uniq
 
-    def analizar_proyectos(self, filas_nuevas) -> Tuple[str, List[dict]]:
-        """
-        Retorna:
-          - html_output (email)
-          - todos_los_detalles_para_excel (lista dict)
-        """
-        if not self.client or not filas_nuevas:
-            return self._generar_html_vacio(
-                "No se han detectado nuevas normas o proyectos para analizar en este momento."
-            ), []
+    def analizar_proyectos(self, filas_nuevas):
+        if not filas_nuevas:
+            return self.ui.empty("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
 
         items_para_modelo = []
-        meta_data_por_id: Dict[str, Dict[str, str]] = {}
-        seccion_esperada_por_id: Dict[str, str] = {}
+        meta_data_por_id = {}
+        seccion_esperada_por_id = {}
 
         for fila in filas_nuevas:
             id_interno = str(fila[0]).strip()
@@ -110,12 +92,7 @@ class AnalistaLegislativo:
             link_en_fila = str(fila[6]).strip() if len(fila) > 6 else ""
             link = link_en_fila or self.generar_link(origen, expediente)
 
-            titulo_simple = (
-                contenido_completo.split("\n")[0]
-                .replace("TITULO: ", "")
-                .replace("NORMA: ", "")
-                .strip()
-            )
+            titulo_simple = contenido_completo.split("\n")[0].replace("TITULO: ", "").replace("NORMA: ", "").strip()
 
             meta_data_por_id[id_interno] = {
                 "titulo": titulo_simple,
@@ -130,59 +107,30 @@ class AnalistaLegislativo:
                 "descripcion": contenido_completo,
                 "fuente": origen,
                 "autor": autor,
-                "seccion_esperada": sec,
+                "seccion_esperada": sec
             })
 
-        prompt = self._build_prompt(items_para_modelo)
+        if not self.client:
+            data_norm = {k: {"resumen": "", "items": []} for k in ("boletin", "diputados", "senado")}
+            for it in items_para_modelo:
+                data_norm[it["seccion_esperada"]]["items"].append({
+                    "id_interno": it["id_interno"],
+                    "referencia": it["referencia"],
+                    "titulo_descriptivo": meta_data_por_id[it["id_interno"]]["titulo"],
+                    "impacto_nivel": "BAJO",
+                    "categorias": [],
+                    "justificacion": "S/D"
+                })
+            html = self.ui.render(
+                data_norm=data_norm,
+                meta_data_por_id=meta_data_por_id,
+                impacto_normalizer=self._normalizar_impacto,
+                categorias_normalizer=self._normalizar_categorias
+            )
+            return html, []
 
-        modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
-
-        for modelo in modelos:
-            for _ in range(3):
-                try:
-                    print(f"Usando modelo {modelo}")
-                    response = self.client.models.generate_content(
-                        model=modelo,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json"),
-                    )
-                    data = json.loads(response.text)
-
-                    data_norm = self._normalizar_y_reubicar(data, seccion_esperada_por_id)
-
-                    todos_los_detalles_para_excel = []
-                    vistos_excel = set()
-                    for k in ("boletin", "diputados", "senado"):
-                        for it in data_norm.get(k, {}).get("items", []) or []:
-                            id_ref = str(it.get("id_interno", "")).strip()
-                            if id_ref and id_ref not in vistos_excel:
-                                todos_los_detalles_para_excel.append(it)
-                                vistos_excel.add(id_ref)
-
-                    html_output = self.ui.render(
-                        data_norm=data_norm,
-                        meta_data_por_id=meta_data_por_id,
-                        normalizar_impacto_fn=self._normalizar_impacto,
-                        normalizar_categorias_fn=self._normalizar_categorias,
-                        email_filtra_niveles=("ALTO", "MEDIO"),
-                    )
-                    return html_output, todos_los_detalles_para_excel
-
-                except Exception as e:
-                    errores_saturacion = ["503", "overloaded", "429", "quota", "Resource has been exhausted"]
-                    if any(err in str(e) for err in errores_saturacion):
-                        time.sleep(5)
-                        continue
-                    print(f"❌ Error modelo: {e}")
-                    break
-
-        return self._generar_html_vacio(
-            "Ocurrió un error al procesar el análisis con Inteligencia Artificial."
-        ), []
-
-    def _build_prompt(self, items_para_modelo: List[dict]) -> str:
-        return f"""
-Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias / BLapp).
+        prompt = f"""
+Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias).
 Analiza los siguientes items del Boletín Oficial y Congreso.
 
 TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno. No inventes datos.
@@ -193,69 +141,88 @@ REGLA DE CLASIFICACIÓN (OBLIGATORIA):
 
 SALIDA OBLIGATORIA: Devuelve SOLO un JSON válido, sin texto adicional, con esta estructura EXACTA:
 {{
-  "boletin": {{
-    "resumen": "Resumen ejecutivo (máx 3 líneas) con lo más destacado del día, con hechos concretos.",
-    "items": [{{"id_interno":"...","referencia":"...","titulo_descriptivo":"...","impacto_nivel":"ALTO|MEDIO|BAJO","categorias":["Laboral"],"justificacion":"..."}}]
-  }},
-  "diputados": {{
-    "resumen": "Resumen ejecutivo (máx 3 líneas) de actividad parlamentaria.",
-    "items": []
-  }},
-  "senado": {{
-    "resumen": "Resumen ejecutivo (máx 3 líneas) de actividad parlamentaria.",
-    "items": []
-  }}
+  "boletin": {{"resumen": "...", "items": []}},
+  "diputados": {{"resumen": "...", "items": []}},
+  "senado": {{"resumen": "...", "items": []}}
 }}
 
-INSTRUCCIONES DE REDACCIÓN (OBLIGATORIAS):
-1) "titulo_descriptivo" (titular breve, periodístico)
-- Si es NOMBRAMIENTO/DESIGNACIÓN: "Designación de [NOMBRE] como [CARGO] en [ORGANISMO]".
-- Si es RENUNCIA/CESE: "Aceptan renuncia de [NOMBRE] como [CARGO] en [ORGANISMO]".
-- Si es NORMATIVA: "Cambios en [TEMA PRINCIPAL]".
-- No uses "IMPACTO ..." dentro del título.
+Cada item debe tener:
+- id_interno
+- referencia
+- titulo_descriptivo
+- impacto_nivel: ALTO|MEDIO|BAJO
+- categorias: lista (1 a 4)
+- justificacion (máx 2 líneas)
 
-2) "justificacion" (máx 2 líneas)
-- QUÉ pasa y POR QUÉ importa. Sin relleno.
-- No inventes datos. Si falta, decí "No especifica".
-
-REGLAS DE IMPACTO (OBLIGATORIAS):
-- "impacto_nivel" SOLO puede ser: "ALTO", "MEDIO" o "BAJO".
-- Toda RENUNCIA/CESE y toda DESIGNACIÓN/NOMBRAMIENTO: "ALTO".
-
-CATEGORÍAS:
-- Lista 1 a 4 con inicial mayúscula.
+REGLAS DE IMPACTO:
+- Toda RENUNCIA/ACEPTACIÓN DE RENUNCIA/CESE de funcionarios: ALTO.
+- Toda DESIGNACIÓN/NOMBRAMIENTO de funcionarios: ALTO.
 
 Datos a analizar:
 {json.dumps(items_para_modelo, ensure_ascii=False)}
 """
 
-    def _normalizar_y_reubicar(self, data: Any, seccion_esperada_por_id: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
-        secciones_keys = ["boletin", "diputados", "senado"]
-        data_norm = {k: {"resumen": "", "items": []} for k in secciones_keys}
+        modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
-        # resúmenes
-        for k in secciones_keys:
-            bloque = data.get(k, {}) if isinstance(data, dict) else {}
-            if isinstance(bloque, dict):
-                data_norm[k]["resumen"] = bloque.get("resumen", "") or ""
+        for modelo in modelos:
+            for _ in range(3):
+                try:
+                    response = self.client.models.generate_content(
+                        model=modelo,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    data = json.loads(response.text)
 
-        items_modelo = []
-        for k in secciones_keys:
-            bloque = data.get(k, {}) if isinstance(data, dict) else {}
-            if isinstance(bloque, dict):
-                items_k = bloque.get("items", [])
-                if isinstance(items_k, list):
-                    items_modelo.extend(items_k)
+                    secciones_keys = ["boletin", "diputados", "senado"]
+                    data_norm = {k: {"resumen": "", "items": []} for k in secciones_keys}
 
-        for it in items_modelo:
-            if not isinstance(it, dict):
-                continue
-            id_ref = str(it.get("id_interno", "")).strip()
-            if not id_ref:
-                continue
-            k_esp = seccion_esperada_por_id.get(id_ref)
-            if k_esp not in secciones_keys:
-                k_esp = "boletin" if id_ref.startswith("BO") else "diputados"
-            data_norm[k_esp]["items"].append(it)
+                    for k in secciones_keys:
+                        bloque = data.get(k, {}) if isinstance(data, dict) else {}
+                        if isinstance(bloque, dict):
+                            data_norm[k]["resumen"] = bloque.get("resumen", "") or ""
 
-        return data_norm
+                    items_modelo = []
+                    for k in secciones_keys:
+                        bloque = data.get(k, {}) if isinstance(data, dict) else {}
+                        if isinstance(bloque, dict):
+                            items_k = bloque.get("items", [])
+                            if isinstance(items_k, list):
+                                items_modelo.extend(items_k)
+
+                    for it in items_modelo:
+                        if not isinstance(it, dict):
+                            continue
+                        id_ref = str(it.get("id_interno", "")).strip()
+                        if not id_ref:
+                            continue
+                        k_esp = seccion_esperada_por_id.get(id_ref)
+                        if k_esp not in secciones_keys:
+                            k_esp = "boletin" if id_ref.startswith("BO") else "diputados"
+                        data_norm[k_esp]["items"].append(it)
+
+                    todos_los_detalles_para_excel = []
+                    vistos = set()
+                    for k in secciones_keys:
+                        for it in data_norm.get(k, {}).get("items", []):
+                            rid = str(it.get("id_interno", "")).strip()
+                            if rid and rid not in vistos:
+                                todos_los_detalles_para_excel.append(it)
+                                vistos.add(rid)
+
+                    html_output = self.ui.render(
+                        data_norm=data_norm,
+                        meta_data_por_id=meta_data_por_id,
+                        impacto_normalizer=self._normalizar_impacto,
+                        categorias_normalizer=self._normalizar_categorias
+                    )
+                    return html_output, todos_los_detalles_para_excel
+
+                except Exception as e:
+                    txt = str(e)
+                    if any(x in txt for x in ("503", "overloaded", "429", "quota", "Resource has been exhausted")):
+                        time.sleep(5)
+                        continue
+                    break
+
+        return self.ui.empty("Ocurrió un error al procesar el análisis con Inteligencia Artificial."), []
