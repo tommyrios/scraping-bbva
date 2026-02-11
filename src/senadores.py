@@ -209,54 +209,55 @@ class ScrapearSenado:
             return None
 
     def scrape(self):
-    self.obtener_diccionario_partidos()
-    url_listado = "https://www.senado.gob.ar/parlamentario/parlamentaria/avanzada?cantRegistros=100"
-    print(f"Entrando a {url_listado}")
-    try:
-        self.driver.get(url_listado)
-        WebDriverWait(self.driver, 30).until(
-            lambda d: ("verExp" in (d.page_source or "")) or ("<table" in (d.page_source or "").lower())
-        )
-        soup_listado = BeautifulSoup(self.driver.page_source, "html.parser")
-        items = self._extraer_items_listado(soup_listado)
-        if not items:
+        self.obtener_diccionario_partidos()
+        url_listado = "https://www.senado.gob.ar/parlamentario/parlamentaria/avanzada?cantRegistros=100"
+        print(f"Entrando a {url_listado}")
+
+        try:
+            self.driver.get(url_listado)
+            WebDriverWait(self.driver, 30).until(
+                lambda d: ("verExp" in (d.page_source or "")) or ("<table" in (d.page_source or "").lower())
+            )
+            soup_listado = BeautifulSoup(self.driver.page_source, "html.parser")
+            items = self._extraer_items_listado(soup_listado)
+            if not items:
+                self.driver.quit()
+                return pd.DataFrame(self.data)
+        except Exception:
             self.driver.quit()
             return pd.DataFrame(self.data)
-    except Exception:
+
+        for it in items:
+            info = self.extraer_detalle_proyecto(it["url_detalle"], fallback_extracto=it.get("extracto", "S/D"))
+            if not info:
+                continue
+
+            autor_para_mostrar = info.get("Autor", "S/D") or "S/D"
+            autor_para_buscar = autor_para_mostrar.replace(" Y OTROS", "").strip()
+
+            if "," in autor_para_buscar:
+                partes = autor_para_buscar.split(",", 1)
+                if len(partes) == 2:
+                    autor_para_buscar = f"{partes[1].strip()} {partes[0].strip()}"
+
+            datos_extra = self.mapa_datos_senadores.get(autor_para_buscar, {"partido": "", "provincia": ""})
+
+            self.data.append({
+                "Cámara de Origen": "Senado",
+                "Expediente": it.get("expediente_id", "S/D"),
+                "Autor": autor_para_mostrar,
+                "Fecha de inicio": info.get("Fecha de inicio", "S/D"),
+                "Proyecto": info.get("Proyecto", "S/D"),
+                "Comisiones": info.get("Comisiones", "S/D"),
+                "Link Texto": info.get("Link Texto", it["url_detalle"]),
+                "Estado": "",
+                "Probabilidad": "",
+                "Partido Político": datos_extra.get("partido", ""),
+                "Provincia": datos_extra.get("provincia", ""),
+                "Observaciones": ""
+            })
+    
+            time.sleep(0.25)
+    
         self.driver.quit()
         return pd.DataFrame(self.data)
-
-    for it in items:
-        info = self.extraer_detalle_proyecto(it["url_detalle"], fallback_extracto=it.get("extracto", "S/D"))
-        if not info:
-            continue
-
-        autor_para_mostrar = info.get("Autor", "S/D") or "S/D"
-        autor_para_buscar = autor_para_mostrar.replace(" Y OTROS", "").strip()
-
-        if "," in autor_para_buscar:
-            partes = autor_para_buscar.split(",", 1)
-            if len(partes) == 2:
-                autor_para_buscar = f"{partes[1].strip()} {partes[0].strip()}"
-
-        datos_extra = self.mapa_datos_senadores.get(autor_para_buscar, {"partido": "", "provincia": ""})
-
-        self.data.append({
-            "Cámara de Origen": "Senado",
-            "Expediente": it.get("expediente_id", "S/D"),
-            "Autor": autor_para_mostrar,
-            "Fecha de inicio": info.get("Fecha de inicio", "S/D"),
-            "Proyecto": info.get("Proyecto", "S/D"),
-            "Comisiones": info.get("Comisiones", "S/D"),
-            "Link Texto": info.get("Link Texto", it["url_detalle"]),
-            "Estado": "",
-            "Probabilidad": "",
-            "Partido Político": datos_extra.get("partido", ""),
-            "Provincia": datos_extra.get("provincia", ""),
-            "Observaciones": ""
-        })
-
-        time.sleep(0.25)
-
-    self.driver.quit()
-    return pd.DataFrame(self.data)
