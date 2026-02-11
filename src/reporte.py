@@ -319,7 +319,6 @@ class ReporteUI:
             if n <= 0:
                 continue
             parts.append(f'<a href="#sec-{sec.key}">{sec.titulo} ({n})</a>')
-        parts.append('<div class="toc-muted">Tip: tocá una sección para saltar directo.</div>')
         parts.append('</div>')
         return "\n".join(parts)
 
