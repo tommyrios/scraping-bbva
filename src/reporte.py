@@ -9,6 +9,10 @@ class Seccion:
 
 
 class ReporteUI:
+    """
+    Clase compatible con Gmail para generar el HTML del reporte.
+    Reemplazar la definición anterior por esta en reporte.py.
+    """
 
     LOGO_CID = "cid:bbva_logo"
 
@@ -20,101 +24,111 @@ class ReporteUI:
             Seccion("senado", "Senado"),
         ]
 
-    # ==========================
+    # ------------------------
     # HEADER (GMAIL SAFE)
-    # ==========================
+    # ------------------------
     def header(self) -> str:
-        return f"""
-<!doctype html>
+        # Email-safe header using tables and inline styles.
+        return f"""<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 </head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#263238;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:20px 0;">
-<tr>
-<td align="center">
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial, Helvetica, sans-serif;color:#263238;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:18px 0;">
+  <tr>
+    <td align="center">
+      <table width="780" cellpadding="0" cellspacing="0" style="max-width:780px;width:100%;">
+        <tr>
+          <td style="padding:0 18px;">
 
-<table width="780" cellpadding="0" cellspacing="0" style="max-width:780px;width:100%;">
-<tr>
-<td style="padding:0 18px;">
-
-<!-- HEADER -->
-<table width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td style="background:#06263d;padding:20px;border-radius:8px 8px 0 0;text-align:center;">
-<img src="{self.LOGO_CID}" width="120" style="display:block;margin:0 auto 10px auto;border:0;">
-<div style="font-size:20px;color:#ffffff;font-weight:600;">
-Reporte Regulatorio Diario
-</div>
-<div style="font-size:11px;color:#ffffff;text-transform:uppercase;letter-spacing:1px;margin-top:6px;">
-Sistema de Monitoreo de Asuntos Públicos
-</div>
-</td>
-</tr>
-<tr>
-<td style="background:#ffffff;border:1px solid #e7eef7;border-top:none;padding:20px;">
-<a name="top"></a>
+            <!-- HEADER -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              <tr>
+                <td style="background:#06263d;padding:18px;border-radius:8px 8px 0 0;text-align:center;">
+                  <!-- logo (cid) -->
+                  <img src="{self.LOGO_CID}" alt="BBVA" width="120" style="display:block;margin:0 auto 8px auto;border:0;outline:none;text-decoration:none;">
+                  <div style="font-family:Georgia, 'Times New Roman', serif;font-size:20px;color:#ffffff;font-weight:600;line-height:1.1;">
+                    Reporte Regulatorio Diario
+                  </div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.92);text-transform:uppercase;letter-spacing:1px;margin-top:6px;font-weight:700;">
+                    Sistema de Monitoreo de Asuntos Públicos
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td style="background:#ffffff;border:1px solid #e7eef7;border-top:none;padding:18px;">
+                  <a name="top"></a>
 """
 
-    # ==========================
-    # FOOTER
-    # ==========================
+    # ------------------------
+    # FOOTER (GMAIL SAFE)
+    # ------------------------
     def footer(self) -> str:
         return f"""
-</td>
-</tr>
-</table>
+                </td>
+              </tr>
+            </table>
+            <!-- /HEADER CARD -->
 
-<!-- FOOTER -->
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
-<tr>
-<td style="text-align:center;font-size:12px;color:#58606a;padding:20px 0;border-top:1px solid #e7eef7;">
-© {self.year_footer} BBVA Argentina • Reporte generado por Gemini
-</td>
-</tr>
-</table>
+          </td>
+        </tr>
+      </table>
 
-</td>
-</tr>
-</table>
+      <!-- FOOTER -->
+      <table width="780" cellpadding="0" cellspacing="0" style="max-width:780px;width:100%;margin-top:14px;">
+        <tr>
+          <td style="padding:0 18px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding:16px 0 28px 0;text-align:center;font-size:12px;color:#58606a;border-top:1px solid #e7eef7;">
+                  © {self.year_footer} BBVA Argentina • Reporte generado por Gemini
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
 
-</td>
-</tr>
+    </td>
+  </tr>
 </table>
 </body>
 </html>
 """
 
-    # ==========================
-    # TOC
-    # ==========================
+    # ------------------------
+    # TOC (inline-safe)
+    # ------------------------
     def _toc(self, counts: Dict[str, int]) -> str:
-        html = """
-<div style="background:#f7f9fb;border:1px solid #e7eef7;border-radius:8px;padding:12px;margin-bottom:24px;">
-<div style="font-weight:bold;color:#06263d;font-size:13px;margin-bottom:8px;">Índice</div>
-"""
+        html = (
+            '<div style="background:#f7f9fb;border:1px solid #e7eef7;border-radius:8px;padding:12px;margin-bottom:22px;">'
+            '<div style="font-weight:700;color:#06263d;font-size:13px;margin-bottom:8px;">Índice</div>'
+        )
         for sec in self.secciones:
             n = counts.get(sec.key, 0)
-            html += f'<a href="#sec-{sec.key}" style="color:#0a4b7a;font-size:13px;font-weight:bold;text-decoration:none;margin-right:15px;">{sec.titulo} ({n})</a>'
+            html += (
+                f'<a href="#sec-{sec.key}" style="color:#0a4b7a;font-size:13px;font-weight:700;text-decoration:none;margin-right:14px;">'
+                f'{sec.titulo} ({n})</a>'
+            )
         html += "</div>"
         return html
 
-    # ==========================
-    # COLOR POR SECCIÓN
-    # ==========================
+    # ------------------------
+    # Section color mapping
+    # ------------------------
     def _section_color(self, key: str) -> str:
         if key == "boletin":
             return "#E89A52"
         if key == "diputados":
-            return "#1F7A44"
+            return "#1F7A44"  # verde más serio
         if key == "senado":
             return "#78D7E0"
         return "#06263d"
 
-    # ==========================
-    # RENDER PRINCIPAL
-    # ==========================
+    # ------------------------
+    # RENDER HTML
+    # ------------------------
     def render(
         self,
         data_norm: Dict[str, Dict[str, Any]],
@@ -122,85 +136,125 @@ Sistema de Monitoreo de Asuntos Públicos
         impacto_normalizer,
         categorias_normalizer,
     ) -> str:
+        """
+        Genera el HTML completo, compatible con Gmail.
+        - Muestra solo secciones con items (impacto ALTO o MEDIO)
+        - Inserta separadores gruesos solo entre secciones visibles
+        - Agrega 'Volver al índice' al final de cada sección
+        """
 
         def contar_items(items: List[dict]) -> int:
-            return sum(
-                1 for it in items
-                if impacto_normalizer(it) in ("ALTO", "MEDIO")
-            )
+            cnt = 0
+            for it in items:
+                try:
+                    lvl = impacto_normalizer(it)
+                except Exception:
+                    lvl = "BAJO"
+                if lvl in ("ALTO", "MEDIO"):
+                    cnt += 1
+            return cnt
 
+        # Conteo por sección
         counts = {}
         for sec in self.secciones:
             bloque = data_norm.get(sec.key, {}) or {}
-            items = bloque.get("items", [])
+            items = bloque.get("items", []) if isinstance(bloque, dict) else []
             counts[sec.key] = contar_items(items)
 
         html = self.header()
         html += self._toc(counts)
 
-        secciones_visibles = [
-            sec for sec in self.secciones
-            if counts.get(sec.key, 0) > 0
-        ]
+        # Build list of sections to render (only those with >0 items)
+        secciones_visibles = [sec for sec in self.secciones if counts.get(sec.key, 0) > 0]
 
+        if not secciones_visibles:
+            html += (
+                '<div style="text-align:center;padding:36px 0;color:#58606a;">'
+                '<div style="font-size:16px;color:#06263d;font-weight:700;margin-bottom:6px;">Sin Novedades de Impacto</div>'
+                '<div>No hubo ítems con impacto Alto o Medio.</div>'
+                '</div>'
+            )
+            html += self.footer()
+            return html
+
+        # Render sections and items
         for idx, sec in enumerate(secciones_visibles):
+            bloque = data_norm.get(sec.key, {}) or {}
+            items = bloque.get("items", []) if isinstance(bloque, dict) else []
+            # Section header block
+            color_bar = self._section_color(sec.key)
+            html += (
+                f'<a name="sec-{sec.key}"></a>'
+                f'<div style="margin-bottom:28px;">'
+                f'<div style="border-top:6px solid {color_bar};margin-bottom:12px;border-radius:4px;"></div>'
+                f'<div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:8px;color:#081122;">'
+                f'{sec.titulo} • {counts.get(sec.key,0)} ítems</div>'
+            )
 
-            bloque = data_norm.get(sec.key, {})
-            items = bloque.get("items", [])
+            # Optional resumen from bloque (if exists)
+            resumen = ""
+            if isinstance(bloque, dict):
+                resumen = (bloque.get("resumen") or "") or ""
+            if resumen:
+                html += f'<div style="background:#f3fbff;border-left:4px solid #0a4b7a;padding:10px;border-radius:6px;margin-bottom:12px;color:#1f3642;font-size:14px;">{resumen}</div>'
 
-            html += f"""
-<a name="sec-{sec.key}"></a>
-<div style="margin-bottom:30px;">
-<div style="border-top:6px solid {self._section_color(sec.key)};margin-bottom:15px;"></div>
-<div style="font-size:13px;font-weight:bold;text-transform:uppercase;margin-bottom:6px;">
-{sec.titulo} • {counts[sec.key]} ítems
-</div>
-"""
-
+            # Render items (only ALTO/MEDIO)
             for p in items:
-                impacto = impacto_normalizer(p)
+                try:
+                    impacto = impacto_normalizer(p)
+                except Exception:
+                    impacto = "BAJO"
                 if impacto not in ("ALTO", "MEDIO"):
                     continue
 
-                titulo = p.get("titulo_descriptivo", "Sin título")
-                ref = p.get("referencia", "")
-                just = p.get("justificacion", "")
-                link = p.get("link") or "#"
+                id_ref = str(p.get("id_interno", "")).strip()
+                meta = meta_data_por_id.get(id_ref, {}) if id_ref else {}
 
-                badge_color = "#b92a2f" if impacto == "ALTO" else "#d9b34a"
-                badge_text_color = "#ffffff" if impacto == "ALTO" else "#12202a"
+                titulo = p.get("titulo_descriptivo") or meta.get("titulo") or "Sin título"
+                ref = p.get("referencia") or meta.get("referencia") or ""
+                just = (p.get("justificacion") or "").strip()
+                link = meta.get("link") or p.get("link") or "#"
+                fuente = meta.get("fuente") or p.get("source") or ""
+                fecha = p.get("fecha") or p.get("date") or ""
 
-                html += f"""
-<div style="border:1px solid #f0f6fb;border-radius:8px;padding:14px;margin-bottom:16px;">
-<div style="margin-bottom:8px;">
-<span style="background:#f1f5f9;padding:6px 9px;border-radius:6px;font-size:11px;font-weight:bold;">{ref}</span>
-<span style="background:{badge_color};color:{badge_text_color};padding:6px 9px;border-radius:6px;font-size:11px;font-weight:bold;margin-left:6px;">
-Impacto {impacto}
-</span>
-</div>
-<div style="font-size:16px;font-weight:600;margin:6px 0;">
-{titulo}
-</div>
-<div style="font-size:14px;line-height:1.6;margin-bottom:12px;">
-{just}
-</div>
-<a href="{link}" style="color:#0a4b7a;font-weight:bold;text-decoration:none;">
-Ver Texto Oficial
-</a>
-</div>
-"""
+                # Badge colors
+                if impacto == "ALTO":
+                    badge_bg = "#b92a2f"
+                    badge_color = "#ffffff"
+                else:
+                    badge_bg = "#d9b34a"
+                    badge_color = "#12202a"
 
-            html += """
-<div style="margin-top:10px;">
-<a href="#top" style="color:#0a4b7a;font-weight:bold;text-decoration:none;font-size:13px;">
-Volver al índice
-</a>
-</div>
-</div>
-"""
+                # Categories badges
+                categorias = categorias_normalizer(p) if categorias_normalizer else []
+                cat_html = ""
+                for c in categorias:
+                    cat_html += f'<span style="display:inline-block;background:#f1f5f9;color:#475569;padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;margin-bottom:6px;">{c}</span>'
 
+                # Item block (Gmail-safe)
+                html += (
+                    '<div style="border:1px solid #f0f6fb;border-radius:8px;padding:12px;margin-bottom:14px;background:#ffffff;">'
+                    '<div style="margin-bottom:8px;">'
+                    f'<span style="display:inline-block;background:#f1f5f9;color:#475569;padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;">{ref}</span>'
+                    f'<span style="display:inline-block;background:{badge_bg};color:{badge_color};padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;">Impacto {impacto}</span>'
+                    f'{cat_html}'
+                    '</div>'
+                    f'<div style="font-family:Georgia, \'Times New Roman\', serif;font-size:16px;color:#071226;margin:6px 0;font-weight:600;">{titulo}</div>'
+                )
+                if fuente or fecha:
+                    html += f'<div style="font-size:13px;color:#58606a;margin-bottom:8px;">{fuente}{" • " if fuente and fecha else ""}{fecha}</div>'
+                if just:
+                    html += f'<div style="font-size:14px;line-height:1.6;margin-bottom:10px;color:#24333a;">{just}</div>'
+                html += f'<a href="{link}" style="color:#0a4b7a;font-weight:700;text-decoration:none;font-size:13px;">Ver Texto Oficial</a>'
+                html += '</div>'
+
+            # Back to top link for this section
+            html += '<div style="margin-top:10px;"><a href="#top" style="color:#0a4b7a;font-weight:700;text-decoration:none;font-size:13px;">Volver al índice</a></div>'
+            html += '</div>'  # end section
+
+            # Divider only between sections (no divider after last)
             if idx < len(secciones_visibles) - 1:
-                html += '<div style="height:8px;background:#06263d;border-radius:6px;margin:30px 0;"></div>'
+                html += '<div style="height:8px;background:#06263d;border-radius:6px;margin:28px 0;"></div>'
 
         html += self.footer()
         return html
