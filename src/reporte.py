@@ -11,16 +11,14 @@ class Seccion:
 class ReporteUI:
     LOGO_CID = "cid:bbva_logo"
 
-    COLOR_NAVY = "#072146"
-    COLOR_LINK = "#004481"
-
-    COLOR_ALTO = "#ED2B3B"
-    COLOR_MEDIO = "#FFE761"
-    COLOR_MEDIO_TEXT = "#FFFFFF"
-
-    COLOR_MANDARIN = "#FFB56B"
-    COLOR_LIME = "#88E783"
-    COLOR_ICE = "#8BE1E9"
+    COLOR_NAVY = "#06263d"
+    COLOR_LINK = "#0a4b7a"
+    COLOR_ALTO = "#b92a2f"
+    COLOR_MEDIO = "#d9b34a"
+    COLOR_DIPUTADOS = "#1F7A44"
+    COLOR_MUTED = "#58606a"
+    COLOR_BG_SOFT = "#f7f9fb"
+    COLOR_BORDER = "#e7eef7"
 
     def __init__(self, year_footer: int = 2026):
         self.year_footer = year_footer
@@ -31,305 +29,129 @@ class ReporteUI:
         ]
 
     def header(self) -> str:
-        return f"""<!DOCTYPE html>
-<html>
+        return f"""<!doctype html>
+<html lang="es">
 <head>
-<meta charset="utf-8">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Source+Serif+4:wght@700;800&display=swap');
-
-  body {{
-    font-family: 'Lato', Arial, Helvetica, sans-serif;
-    color: #1F2937;
-    line-height: 1.6;
-    background-color: #ffffff;
-    margin: 0;
-    padding: 0;
-  }}
-  .container {{
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    background: #ffffff;
+  :root{{
+    --navy: {self.COLOR_NAVY};
+    --link: {self.COLOR_LINK};
+    --alto: {self.COLOR_ALTO};
+    --medio: {self.COLOR_MEDIO};
+    --dip-green: {self.COLOR_DIPUTADOS};
+    --muted: {self.COLOR_MUTED};
+    --bg-soft: {self.COLOR_BG_SOFT};
+    --border: {self.COLOR_BORDER};
+    --max-width: 780px;
   }}
 
-  .header {{
-    background-color: {self.COLOR_NAVY};
-    color: #ffffff;
-    padding: 30px 5%;
-  }}
-  .logo-row {{
-    text-align: left;
-    margin-bottom: 18px;
-    width: 100%;
-  }}
-  .logo-img {{
-    height: 44px;
-    width: auto;
-    display: block;
-    border: 0;
-    outline: none;
-    text-decoration: none;
-  }}
-  .title-row {{
-    text-align: center;
-    width: 100%;
-  }}
-  .header h1 {{
-    margin: 0;
-    font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
-    font-size: 28px;
-    font-weight: 800;
-    letter-spacing: 0.2px;
-    color: #ffffff;
-  }}
-  .header h2 {{
-    margin: 8px 0 0;
-    font-size: 12px;
-    opacity: 0.9;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: #85C8FF;
-  }}
+  html,body{{margin:0;padding:0;background:#fff;color:#263238;font-family:'Lato',Arial,Helvetica,sans-serif;}}
+  .wrap{{max-width:var(--max-width);margin:18px auto;padding:0 18px;}}
 
-  .content {{
-    padding: 30px 5% 40px 5%;
-    background-color: #ffffff;
-  }}
+  .header{{background:var(--navy);color:#fff;padding:20px 28px;border-radius:8px 8px 0 0;}}
+  .title{{text-align:center;margin-top:8px}}
+  .title h1{{margin:0;font-family:'Source Serif 4',serif;font-size:22px;font-weight:600;}}
+  .title h2{{margin:6px 0 0;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;opacity:.95}}
 
-  .toc {{
-    background: #F7F9FC;
-    border: 1px solid #DCE3EF;
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin: 0 0 20px 0;
-  }}
-  .toc-title {{
-    font-weight: 900;
-    color: {self.COLOR_NAVY};
-    font-size: 13px;
-    margin: 0 0 10px 0;
-  }}
-  .toc a {{
-    text-decoration: none;
-    font-weight: 900;
-    font-size: 13px;
-    margin-right: 14px;
-    display: inline-block;
-    margin-bottom: 6px;
-    color: {self.COLOR_LINK};
-  }}
+  .card{{background:#fff;border:1px solid var(--border);border-top:none;padding:22px;border-radius:0 0 8px 8px;}}
 
-  .section-separator {{
-    border-top: 7px solid {self.COLOR_NAVY};
-    margin: 46px 0 18px 0;
-    padding-top: 10px;
-  }}
+  .toc{{background:var(--bg-soft);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:24px;}}
+  .toc-title{{font-weight:700;color:var(--navy);font-size:13px;margin-bottom:6px}}
+  .toc a{{color:var(--link);font-weight:700;font-size:13px;text-decoration:none;margin-right:12px}}
 
-  .section-banner {{
-    border-radius: 14px;
-    padding: 18px 18px;
-    margin: 0 0 22px 0;
-    border: 1px solid #DCE3EF;
-    background: #FFFFFF;
-  }}
-  .section-bar {{
-    height: 7px;
-    border-radius: 999px;
-    margin: 0 0 12px 0;
-  }}
-  .section-kicker {{
-    margin: 0;
-    font-size: 12px;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 1.6px;
-    color: #0B1220;
-  }}
-  .section-sub {{
-    margin-top: 6px;
-    font-size: 12px;
-    color: #4B5563;
-  }}
+  .section-wrap{{margin-bottom:38px;}}
+  .section-divider{{height:8px;background:var(--navy);border-radius:6px;margin:30px 0;}}
 
-  .resumen-block {{
-    background-color: #F4F8FB;
-    border: 1px solid #DCE3EF;
-    border-left: 6px solid {self.COLOR_LINK};
-    padding: 18px 18px;
-    margin: 0 0 26px 0;
-    color: #334155;
-    font-size: 14px;
-    border-radius: 10px;
-  }}
+  .section-banner{{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px}}
+  .section-bar{{height:6px;border-radius:999px;margin-bottom:8px}}
+  .section-kicker{{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}}
+  .section-sub{{font-size:12px;color:var(--muted);margin-top:6px}}
 
-  .item {{
-    margin-bottom: 34px;
-    padding-bottom: 24px;
-    border-bottom: 1px solid #DCE3EF;
-  }}
-  .item:last-child {{ border-bottom: none; }}
+  .item{{border:1px solid #f0f6fb;border-radius:8px;padding:14px 10px;margin-bottom:16px}}
+  .badges{{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}}
+  .badge{{font-size:11px;padding:6px 9px;border-radius:8px;font-weight:700;text-transform:uppercase}}
+  .badge.ref{{background:#f1f5f9;color:#475569;border:1px solid var(--border)}}
+  .badge.alto{{background:var(--alto);color:#fff}}
+  .badge.medio{{background:var(--medio);color:#12202a}}
 
-  .badges-row {{ margin-bottom: 10px; }}
+  .item-title{{font-family:'Source Serif 4',serif;font-size:16px;font-weight:600;margin:6px 0}}
+  .meta{{font-size:13px;color:var(--muted);margin-bottom:8px}}
+  .justificacion{{font-size:14px;line-height:1.6;margin-bottom:12px}}
+  .cta{{display:inline-block;padding:9px 13px;border-radius:8px;border:1px solid var(--link);color:var(--link);font-weight:700;text-decoration:none;font-size:13px}}
 
-  .badge {{
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-size: 11px;
-    font-weight: 900;
-    text-transform: uppercase;
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 8px;
-    margin-bottom: 6px;
-  }}
-  .bg-ref {{
-    background-color: #F1F5F9;
-    color: #475569;
-    border: 1px solid #DCE3EF;
-  }}
-  .bg-alto {{
-    background-color: {self.COLOR_ALTO};
-    color: #ffffff;
-  }}
-  .bg-medio {{
-    background-color: {self.COLOR_MEDIO};
-    color: {self.COLOR_MEDIO_TEXT};
-  }}
-  .bg-bajo {{
-    background-color: #E8F0FE;
-    color: {self.COLOR_NAVY};
-    border: 1px solid #D7E9F7;
-  }}
+  .back{{margin-top:12px}}
+  .back a{{color:var(--link);font-weight:700;text-decoration:none;font-size:13px}}
 
-  .item-title {{
-    font-size: 18px;
-    font-weight: 900;
-    color: #0B1220;
-    margin: 0 0 8px 0;
-    line-height: 1.35;
-  }}
-  .autor {{
-    font-size: 13px;
-    color: #6B7280;
-    margin-top: -2px;
-    margin-bottom: 10px;
-  }}
-  .justificacion {{
-    font-size: 14px;
-    color: #374151;
-    margin-bottom: 14px;
-    text-align: left;
-    line-height: 1.65;
-  }}
+  .footer{{text-align:center;font-size:12px;color:var(--muted);padding:20px 0;border-top:1px solid var(--border)}}
 
-  .btn-link {{
-    display: inline-block;
-    font-size: 12px;
-    color: {self.COLOR_LINK};
-    text-decoration: none;
-    font-weight: 900;
-    border: 2px solid {self.COLOR_LINK};
-    padding: 10px 16px;
-    border-radius: 10px;
-    text-transform: uppercase;
-    background: #FFFFFF;
-  }}
-
-  .back-to-index {{
-    margin: 16px 0 0 0;
-    text-align: left;
-  }}
-  .back-to-index a {{
-    font-size: 12px;
-    font-weight: 900;
-    color: {self.COLOR_LINK};
-    text-decoration: none;
-  }}
-
-  .empty-state {{
-    text-align: center;
-    padding: 40px 0;
-    color: #6B7280;
-  }}
-
-  .footer {{
-    background-color: #F7F9FC;
-    padding: 26px 5%;
-    text-align: center;
-    font-size: 12px;
-    color: #6B7280;
-    border-top: 1px solid #DCE3EF;
+  @media (max-width:560px){{
+    .wrap{{padding:0 12px}}
+    .header{{padding:16px}}
+    .title h1{{font-size:20px}}
+    .item-title{{font-size:15px}}
   }}
 </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="logo-row">
-        <img src="{self.LOGO_CID}" alt="" class="logo-img" width="140" height="44" style="display:block;border:0;outline:none;text-decoration:none;">
-      </div>
-      <div class="title-row">
-        <h1>Reporte Regulatorio Diario</h1>
-        <h2>Sistema de Monitoreo de Asuntos Públicos</h2>
-      </div>
+<div class="wrap">
+  <div class="header">
+    <div class="title">
+      <h1>Reporte Regulatorio Diario</h1>
+      <h2>Sistema de Monitoreo de Asuntos Públicos</h2>
     </div>
-    <div class="content">
+  </div>
+  <div class="card">
+    <a id="top"></a>
 """
 
     def footer(self) -> str:
         return f"""
-    </div>
-    <div class="footer">
-      © {self.year_footer} BBVA Argentina • Reporte generado por Gemini
-    </div>
-  </div>
+  </div> <!-- card -->
+  <div class="footer">© {self.year_footer} BBVA Argentina • Reporte generado por Gemini</div>
+</div>
 </body>
 </html>
 """
 
     def empty(self, mensaje: str) -> str:
         return self.header() + f"""
-  <div class="empty-state">
-    <h3 style="margin:0 0 8px 0;color:{self.COLOR_NAVY};font-weight:900;">Sin Novedades</h3>
+  <div style="text-align:center;padding:40px 0;color:{self.COLOR_MUTED}">
+    <h3 style="margin:0 0 8px 0;color:{self.COLOR_NAVY};font-weight:700;">Sin Novedades</h3>
     <p style="margin:0;">{mensaje}</p>
   </div>
 """ + self.footer()
 
-    def _section_color(self, key: str) -> str:
-        if key == "boletin":
-            return self.COLOR_MANDARIN
-        if key == "diputados":
-            return self.COLOR_LIME
-        if key == "senado":
-            return self.COLOR_ICE
-        return self.COLOR_NAVY
+    def _section_header(self, key: str, titulo: str, count: int, subtitle: str, color_bar: str) -> str:
+        return f"""
+    <div class="section-banner">
+      <div class="section-bar" style="background:{color_bar}"></div>
+      <div class="section-kicker">{titulo} • {count} ítems</div>
+      <div class="section-sub">{subtitle}</div>
+    </div>
+"""
+
+    def _section_divider(self) -> str:
+        return '<div class="section-divider"></div>'
 
     def _toc(self, counts: Dict[str, int]) -> str:
-        parts = ['<a name="top" id="top"></a>', '<div class="toc">', '<div class="toc-title">Índice</div>']
+        parts = ['<div class="toc">', '<div class="toc-title">Índice</div>']
         for sec in self.secciones:
             n = int(counts.get(sec.key, 0) or 0)
-            if n <= 0:
-                continue
             parts.append(f'<a href="#sec-{sec.key}">{sec.titulo} ({n})</a>')
         parts.append('</div>')
         return "\n".join(parts)
 
-    def _separator(self) -> str:
-        return '<div class="section-separator"></div>'
-
-    def _section_header(self, key: str, titulo: str, count: int, subtitle: str) -> str:
-        color = self._section_color(key)
-        return f"""
-{self._separator()}
-<a name="sec-{key}" id="sec-{key}"></a>
-<div class="section-banner">
-  <div class="section-bar" style="background:{color};"></div>
-  <div class="section-kicker">{titulo} • {count} ítems</div>
-  <div class="section-sub">{subtitle}</div>
-</div>
-"""
+    def _section_color(self, key: str) -> str:
+        if key == "boletin":
+            return "#E89A52"
+        if key == "diputados":
+            return self.COLOR_DIPUTADOS
+        if key == "senado":
+            return "#78D7E0"
+        return self.COLOR_NAVY
 
     def render(
         self,
@@ -338,10 +160,20 @@ class ReporteUI:
         impacto_normalizer,
         categorias_normalizer,
     ) -> str:
-        def contar_items_email(items: List[dict]) -> int:
+        """
+        Renderiza el HTML final. Lógica:
+         - calcula qué secciones tienen items (ALTO/MEDIO)
+         - renderiza solo esas secciones
+         - inserta la barra separadora **solo** entre secciones (no después de la última)
+         - agrega el link 'Volver al índice' al final de cada sección
+        """
+        def contar_items(items: List[dict]) -> int:
             c = 0
             for it in items:
-                lvl = impacto_normalizer(it)
+                try:
+                    lvl = impacto_normalizer(it)
+                except Exception:
+                    lvl = "BAJO"
                 if lvl in ("ALTO", "MEDIO"):
                     c += 1
             return c
@@ -350,89 +182,90 @@ class ReporteUI:
         for sec in self.secciones:
             bloque = data_norm.get(sec.key, {}) or {}
             items = bloque.get("items", []) if isinstance(bloque, dict) else []
-            counts[sec.key] = contar_items_email(items)
+            counts[sec.key] = contar_items(items)
 
         html = self.header()
         html += self._toc(counts)
 
-        hay_contenido = any((counts.get(sec.key, 0) or 0) > 0 for sec in self.secciones)
-        if not hay_contenido:
+        secciones_a_mostrar: List[Seccion] = []
+        for sec in self.secciones:
+            bloque = data_norm.get(sec.key, {}) or {}
+            items = bloque.get("items", []) if isinstance(bloque, dict) else []
+            if any((impacto_normalizer(it) if impacto_normalizer else "BAJO") in ("ALTO", "MEDIO") for it in items):
+                secciones_a_mostrar.append(sec)
+
+        if not secciones_a_mostrar:
             html += """
-  <div class="empty-state">
-    <h3 style="margin:0 0 8px 0;color:#072146;font-weight:900;">Sin Novedades de Impacto</h3>
+  <div style="text-align:center;padding:40px 0;color:#6b7280">
+    <h3 style="margin:0 0 8px 0;color:#06263d;font-weight:700;">Sin Novedades de Impacto</h3>
     <p style="margin:0;">No hubo ítems con impacto Alto o Medio.</p>
   </div>
 """
             html += self.footer()
             return html
 
-        subt = {
-            "boletin": "Normas y resoluciones publicadas en el Boletín Oficial.",
-            "diputados": "Actividad parlamentaria en Cámara de Diputados.",
-            "senado": "Actividad parlamentaria en Cámara de Senadores.",
-        }
-
-        orden = {"ALTO": 1, "MEDIO": 2, "BAJO": 3}
-
-        for sec in self.secciones:
+        for idx, sec in enumerate(secciones_a_mostrar):
             bloque = data_norm.get(sec.key, {}) or {}
             items = bloque.get("items", []) if isinstance(bloque, dict) else []
             resumen = (bloque.get("resumen", "") if isinstance(bloque, dict) else "") or ""
 
-            items_email = [p for p in items if impacto_normalizer(p) in ("ALTO", "MEDIO")]
+            items_email = [p for p in items if (impacto_normalizer(p) if impacto_normalizer else "BAJO") in ("ALTO", "MEDIO")]
             if not items_email:
                 continue
 
-            html += self._section_header(sec.key, sec.titulo, len(items_email), subt.get(sec.key, ""))
+            color_bar = self._section_color(sec.key)
+            html += f'\n    <a id="sec-{sec.key}"></a>\n    <div class="section-wrap">\n'
+            html += self._section_header(sec.key, sec.titulo, len(items_email), resumen or "", color_bar)
 
             if resumen:
-                html += f'<div class="resumen-block">{resumen}</div>'
+                html += f'    <div class="resumen">{resumen}</div>\n'
 
-            items_ordenados = sorted(items_email, key=lambda x: orden.get(impacto_normalizer(x), 99))
-
-            for p in items_ordenados:
+            # Render items en el orden original (o podés ordenar por impacto si querés)
+            for p in items_email:
                 id_ref = str(p.get("id_interno", "")).strip()
                 meta = meta_data_por_id.get(id_ref, {}) if id_ref else {}
 
                 titulo_mostrar = p.get("titulo_descriptivo") or meta.get("titulo") or "Sin título"
                 ref = p.get("referencia") or meta.get("referencia") or ""
-                link_web = meta.get("link") or "#"
+                link_web = meta.get("link") or p.get("link") or "#"
                 justificacion = (p.get("justificacion", "") or "").strip()
 
-                impacto = impacto_normalizer(p)
-                categorias = categorias_normalizer(p)
+                impacto = impacto_normalizer(p) if impacto_normalizer else "BAJO"
+                categorias = categorias_normalizer(p) if categorias_normalizer else []
 
                 autor_item = (meta.get("autor") or "").strip()
-                autor_html = f'<div class="autor">Autor: <b>{autor_item}</b></div>' if (autor_item and autor_item.upper() != "S/D") else ""
+                autor_html = f'<div class="meta">Autor: <b>{autor_item}</b></div>' if (autor_item and autor_item.upper() != "S/D") else ""
 
                 if impacto == "ALTO":
-                    clase_badge = "bg-alto"
+                    clase_badge = "badge alto"
                 elif impacto == "MEDIO":
-                    clase_badge = "bg-medio"
+                    clase_badge = "badge medio"
                 else:
-                    clase_badge = "bg-bajo"
+                    clase_badge = "badge ref"
 
-                cat_badges = "".join([f'<span class="badge bg-ref">{c}</span>' for c in categorias])
+                cat_badges = "".join([f'<div class="badge ref">{c}</div>' for c in categorias])
 
                 html += f"""
-<div class="item">
-  <div class="badges-row">
-    <span class="badge bg-ref">{ref}</span>
-    <span class="badge {clase_badge}">Impacto {impacto}</span>
-    {cat_badges}
-  </div>
-  <div class="item-title">{titulo_mostrar}</div>
-  {autor_html}
-  <div class="justificacion">{justificacion}</div>
-  <a href="{link_web}" target="_blank" class="btn-link">Ver Texto Oficial</a>
-</div>
+      <div class="item" role="article" aria-labelledby="title-{id_ref}">
+        <div class="badges">
+          <div class="badge ref">{ref}</div>
+          <div class="{clase_badge}">Impacto {impacto}</div>
+          {cat_badges}
+        </div>
+        <div id="title-{id_ref}" class="item-title">{titulo_mostrar}</div>
+        {autor_html}
+        <div class="meta">{meta.get("fuente", "") or p.get("source", "") or ""} • {p.get("fecha", p.get("date", ""))}</div>
+        <div class="justificacion">{justificacion}</div>
+        <a class="cta" href="{link_web}" target="_blank" rel="noopener">Ver Texto Oficial</a>
+      </div>
 """
+            # Link volver al índice (al final de la sección)
+            html += '      <div class="back"><a href="#top">Volver al índice</a></div>\n'
+            html += "    </div>\n"  
 
-            html += """
-<div class="back-to-index">
-  <a href="#top">Volver al índice</a>
-</div>
-"""
+            # Agregar divider solo si NO es la última sección que se renderiza
+            if idx < len(secciones_a_mostrar) - 1:
+                html += f"    {self._section_divider()}\n"
 
         html += self.footer()
         return html
