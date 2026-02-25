@@ -11,7 +11,6 @@ class Seccion:
 class ReporteUI:
     """
     Clase compatible con Gmail para generar el HTML del reporte.
-    Reemplazar la definición anterior por esta en reporte.py.
     """
 
     LOGO_CID = "cid:bbva_logo"
@@ -28,7 +27,6 @@ class ReporteUI:
     # HEADER (GMAIL SAFE)
     # ------------------------
     def header(self) -> str:
-        # Email-safe header using tables and inline styles.
         return f"""<!doctype html>
 <html lang="es">
 <head>
@@ -46,7 +44,6 @@ class ReporteUI:
             <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
               <tr>
                 <td style="background:#06263d;padding:18px;border-radius:8px 8px 0 0;text-align:center;">
-                  <!-- logo (cid) -->
                   <img src="{self.LOGO_CID}" alt="BBVA" width="120" style="display:block;margin:0 auto 8px auto;border:0;outline:none;text-decoration:none;">
                   <div style="font-family:Georgia, 'Times New Roman', serif;font-size:20px;color:#ffffff;font-weight:600;line-height:1.1;">
                     Reporte Regulatorio Diario
@@ -141,6 +138,7 @@ class ReporteUI:
         - Muestra solo secciones con items (impacto ALTO o MEDIO)
         - Inserta separadores gruesos solo entre secciones visibles
         - Agrega 'Volver al índice' al final de cada sección
+        - Renderiza autor si existe (meta['autor'] o item['autor'])
         """
 
         def contar_items(items: List[dict]) -> int:
@@ -181,7 +179,7 @@ class ReporteUI:
         for idx, sec in enumerate(secciones_visibles):
             bloque = data_norm.get(sec.key, {}) or {}
             items = bloque.get("items", []) if isinstance(bloque, dict) else []
-            # Section header block
+
             color_bar = self._section_color(sec.key)
             html += (
                 f'<a name="sec-{sec.key}"></a>'
@@ -196,7 +194,11 @@ class ReporteUI:
             if isinstance(bloque, dict):
                 resumen = (bloque.get("resumen") or "") or ""
             if resumen:
-                html += f'<div style="background:#f3fbff;border-left:4px solid #0a4b7a;padding:10px;border-radius:6px;margin-bottom:12px;color:#1f3642;font-size:14px;">{resumen}</div>'
+                html += (
+                    f'<div style="background:#f3fbff;border-left:4px solid #0a4b7a;'
+                    f'padding:10px;border-radius:6px;margin-bottom:12px;color:#1f3642;font-size:14px;">'
+                    f'{resumen}</div>'
+                )
 
             # Render items (only ALTO/MEDIO)
             for p in items:
@@ -217,6 +219,10 @@ class ReporteUI:
                 fuente = meta.get("fuente") or p.get("source") or ""
                 fecha = p.get("fecha") or p.get("date") or ""
 
+                autor = (meta.get("autor") or p.get("autor") or p.get("autor_item") or "").strip()
+                if autor.upper() in ("S/D", "SD", "N/A", "NA"):
+                    autor = ""
+
                 # Badge colors
                 if impacto == "ALTO":
                     badge_bg = "#b92a2f"
@@ -229,27 +235,53 @@ class ReporteUI:
                 categorias = categorias_normalizer(p) if categorias_normalizer else []
                 cat_html = ""
                 for c in categorias:
-                    cat_html += f'<span style="display:inline-block;background:#f1f5f9;color:#475569;padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;margin-bottom:6px;">{c}</span>'
+                    cat_html += (
+                        f'<span style="display:inline-block;background:#f1f5f9;color:#475569;'
+                        f'padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;'
+                        f'margin-right:6px;margin-bottom:6px;">{c}</span>'
+                    )
 
                 # Item block (Gmail-safe)
                 html += (
-                    '<div style="border:1px solid #f0f6fb;border-radius:8px;padding:12px;margin-bottom:14px;background:#ffffff;">'
+                    '<div style="border:1px solid #f0f6fb;border-radius:8px;'
+                    'padding:12px;margin-bottom:14px;background:#ffffff;">'
                     '<div style="margin-bottom:8px;">'
-                    f'<span style="display:inline-block;background:#f1f5f9;color:#475569;padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;">{ref}</span>'
-                    f'<span style="display:inline-block;background:{badge_bg};color:{badge_color};padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;">Impacto {impacto}</span>'
+                    f'<span style="display:inline-block;background:#f1f5f9;color:#475569;'
+                    f'padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;">{ref}</span>'
+                    f'<span style="display:inline-block;background:{badge_bg};color:{badge_color};'
+                    f'padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;margin-right:6px;">Impacto {impacto}</span>'
                     f'{cat_html}'
                     '</div>'
-                    f'<div style="font-family:Georgia, \'Times New Roman\', serif;font-size:16px;color:#071226;margin:6px 0;font-weight:600;">{titulo}</div>'
+                    f'<div style="font-family:Georgia, \'Times New Roman\', serif;font-size:16px;'
+                    f'color:#071226;margin:6px 0;font-weight:600;">{titulo}</div>'
                 )
+
                 if fuente or fecha:
-                    html += f'<div style="font-size:13px;color:#58606a;margin-bottom:8px;">{fuente}{" • " if fuente and fecha else ""}{fecha}</div>'
+                    html += (
+                        f'<div style="font-size:13px;color:#58606a;margin-bottom:8px;">'
+                        f'{fuente}{" • " if fuente and fecha else ""}{fecha}'
+                        f'</div>'
+                    )
+
+                if autor:
+                    html += (
+                        f'<div style="font-size:13px;color:#58606a;margin-bottom:8px;">'
+                        f'Autor: <b>{autor}</b>'
+                        f'</div>'
+                    )
+
                 if just:
                     html += f'<div style="font-size:14px;line-height:1.6;margin-bottom:10px;color:#24333a;">{just}</div>'
+
                 html += f'<a href="{link}" style="color:#0a4b7a;font-weight:700;text-decoration:none;font-size:13px;">Ver Texto Oficial</a>'
                 html += '</div>'
 
             # Back to top link for this section
-            html += '<div style="margin-top:10px;"><a href="#top" style="color:#0a4b7a;font-weight:700;text-decoration:none;font-size:13px;">Volver al índice</a></div>'
+            html += (
+                '<div style="margin-top:10px;">'
+                '<a href="#top" style="color:#0a4b7a;font-weight:700;text-decoration:none;font-size:13px;">'
+                'Volver al índice</a></div>'
+            )
             html += '</div>'  # end section
 
             # Divider only between sections (no divider after last)
