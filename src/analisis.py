@@ -311,9 +311,9 @@ Datos a analizar:
                     txt = str(e).lower()
 
                     if any(m in txt for m in ["429", "resource_exhausted", "quota", "limit"]):
-                    print("Límite gratuito alcanzado. Esperando 60 segundos.")
-                    time.sleep(61) 
-                    continue
+                        print("Límite gratuito alcanzado. Esperando 60 segundos.")
+                        time.sleep(61) 
+                        continue
                                 
                     if any(m in txt for m in retryable_markers):
                         time.sleep(10)
