@@ -2,7 +2,7 @@ name: Reporte Regulatorio Diario
 
 on:
   schedule:
-    - cron: '42 08 * * 1-5'
+    - cron: '42 06 * * 1-5'
   workflow_dispatch:
 
 jobs:
