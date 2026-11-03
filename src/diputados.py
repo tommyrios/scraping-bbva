@@ -1,5 +1,6 @@
 import time
 import re
+import urllib3
 import requests
 from urllib.parse import urljoin
 
@@ -14,6 +15,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from bs4 import BeautifulSoup
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 class ScrapearDiputados:
     BASE_URL = "https://www.diputados.gov.ar"
@@ -24,19 +27,21 @@ class ScrapearDiputados:
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--ignore-certificate-errors')
         options.add_argument('--window-size=1920,1080')
         options.add_argument(
             "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
 
         self.driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
         self.data = []
 
         self._session = requests.Session()
+        self._session.verify = False
         self._session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+                          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         })
 
     def _normalizar_origen(self, origen_raw: str) -> str:

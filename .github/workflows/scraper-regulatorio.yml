@@ -2,12 +2,16 @@ name: Reporte Regulatorio Diario
 
 on:
   schedule:
-    - cron: '42 06 * * 1-5'
+    # 10:45 UTC = 07:45 AM Argentina (UTC-3), contemplando la demora de cola de GitHub Actions
+    # para que el reporte se ejecute y llegue a las 08:00 AM de Argentina (Lunes a Viernes).
+    - cron: '45 10 * * 1-5'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TZ: America/Argentina/Buenos_Aires
 
     steps:
       - name: Checkout del código
@@ -27,11 +31,12 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Reporte Regulatorio 
+      - name: Reporte Regulatorio
         env:
           GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_DESTINATARIO: ${{ secrets.EMAIL_DESTINATARIO }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
         run: python src/main.py

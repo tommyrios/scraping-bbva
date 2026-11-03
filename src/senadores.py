@@ -1,8 +1,13 @@
+import os
 import time
 import re
-import requests
 import unicodedata
 from urllib.parse import urljoin
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import urllib3
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 import pandas as pd
 from selenium import webdriver
@@ -12,22 +17,31 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from bs4 import BeautifulSoup
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 class ScrapearSenado:
     BASE_URL = "https://www.senado.gob.ar"
 
     def __init__(self):
         print("Inicializando robot Senado...")
+        self.proxy_url = (os.environ.get("PROXY_URL") or "").strip()
+        self.proxy_pool = [self.proxy_url] if self.proxy_url else []
+
         options = Options()
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        options.add_argument("--ignore-certificate-errors")
+        options.add_argument("--allow-insecure-localhost")
         options.add_argument("--window-size=1920,1080")
         options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
+        if self.proxy_url:
+            options.add_argument(f"--proxy-server={self.proxy_url}")
         options.page_load_strategy = "eager"
 
         self.driver = webdriver.Chrome(
@@ -38,11 +52,145 @@ class ScrapearSenado:
         self.data = []
         self.mapa_datos_senadores = {}
 
+        self.headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+        }
+
         self._session = requests.Session()
-        self._session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-        })
+        self._session.verify = False
+        self._session.headers.update(self.headers)
+
+        retry_strategy = Retry(
+            total=2,
+            connect=2,
+            read=2,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS"],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
+
+        if self.proxy_url:
+            self._session.proxies.update({
+                "http": self.proxy_url,
+                "https": self.proxy_url,
+            })
+
+    def _descubrir_proxies_argentina(self):
+        candidatos = []
+        try:
+            url_ps = (
+                "https://api.proxyscrape.com/v2/"
+                "?request=displayproxies&protocol=http&timeout=5000&country=AR&ssl=all&anonymity=all"
+            )
+            r = requests.get(url_ps, timeout=10)
+            if r.status_code == 200:
+                for line in r.text.splitlines():
+                    p = line.strip()
+                    if p and ":" in p:
+                        candidatos.append(f"http://{p}")
+        except Exception:
+            pass
+
+        try:
+            url_gn = (
+                "https://proxylist.geonode.com/api/proxy-list"
+                "?limit=30&page=1&sort_by=lastChecked&sort_type=desc&country=AR"
+            )
+            r = requests.get(url_gn, timeout=10)
+            if r.status_code == 200:
+                for item in r.json().get("data", []):
+                    ip = item.get("ip")
+                    port = item.get("port")
+                    protocols = item.get("protocols") or ["http"]
+                    if ip and port and ("http" in protocols or "https" in protocols):
+                        candidatos.append(f"http://{ip}:{port}")
+        except Exception:
+            pass
+
+        vistos = set()
+        unicos = []
+        for c in candidatos:
+            if c not in vistos:
+                vistos.add(c)
+                unicos.append(c)
+        return unicos
+
+    def _activar_pool_proxies_ar(self, url_prueba, marcador="verExp"):
+        candidatos = self._descubrir_proxies_argentina()
+        if not candidatos:
+            return None
+
+        print(f"   🔎 Probando {len(candidatos)} proxies AR para Senado...")
+
+        def probar(proxy_url):
+            px = {"http": proxy_url, "https": proxy_url}
+            try:
+                resp = requests.get(
+                    url_prueba,
+                    headers=self.headers,
+                    proxies=px,
+                    verify=False,
+                    timeout=(8, 20),
+                )
+                if resp.status_code == 200 and marcador in resp.text:
+                    return proxy_url, resp.text
+            except Exception:
+                pass
+            return None
+
+        html_ok = None
+        validos = []
+        with ThreadPoolExecutor(max_workers=15) as executor:
+            futures = [executor.submit(probar, p) for p in candidatos[:45]]
+            for fut in as_completed(futures):
+                res = fut.result()
+                if res:
+                    p_ok, html = res
+                    validos.append(p_ok)
+                    if html_ok is None:
+                        html_ok = html
+
+        if validos:
+            self.proxy_pool = validos
+            principal = self.proxy_pool[0]
+            self._session.proxies.update({"http": principal, "https": principal})
+            print(f"   ✅ Conectado a Senado mediante pool de {len(self.proxy_pool)} proxies AR.")
+            return html_ok
+        return None
+
+    def _get_con_rotacion(self, url):
+        try:
+            r = self._session.get(url, timeout=(12, 25), allow_redirects=True)
+            if r.status_code == 200:
+                return r
+        except Exception:
+            pass
+
+        for proxy_url in list(self.proxy_pool):
+            try:
+                px = {"http": proxy_url, "https": proxy_url}
+                r = requests.get(
+                    url,
+                    headers=self.headers,
+                    proxies=px,
+                    verify=False,
+                    timeout=(10, 20),
+                    allow_redirects=True,
+                )
+                if r.status_code == 200:
+                    self._session.proxies.update(px)
+                    return r
+            except Exception:
+                continue
+        return None
 
     def limpiar_texto(self, texto):
         if not texto:
@@ -71,10 +219,21 @@ class ScrapearSenado:
     def obtener_diccionario_partidos(self):
         url_lista = f"{self.BASE_URL}/senadores/listados/listaSenadoRes"
         print(f"Mapeando senadores desde {url_lista}")
+        html_source = ""
         try:
             self.driver.get(url_lista)
             WebDriverWait(self.driver, 20).until(lambda d: "<table" in (d.page_source or "").lower())
-            soup = BeautifulSoup(self.driver.page_source, "html.parser")
+            html_source = self.driver.page_source
+        except Exception:
+            r = self._get_con_rotacion(url_lista)
+            if r and r.status_code == 200:
+                html_source = r.text
+
+        if not html_source:
+            return
+
+        try:
+            soup = BeautifulSoup(html_source, "html.parser")
             tabla = soup.find("table", id="senadoresTabla") or soup.find("table")
             if not tabla:
                 return
@@ -86,15 +245,17 @@ class ScrapearSenado:
                     continue
 
                 a_nombre = tds[1].find("a")
-                nombre_raw = self.limpiar_texto(a_nombre.get_text(" ", strip=True) if a_nombre else tds[1].get_text(" ", strip=True))
+                nombre_raw = self.limpiar_texto(
+                    a_nombre.get_text(" ", strip=True) if a_nombre else tds[1].get_text(" ", strip=True)
+                )
                 provincia = self.limpiar_texto(tds[2].get_text(" ", strip=True)).upper()
                 partido = self.limpiar_texto(tds[3].get_text(" ", strip=True)).upper()
 
                 key = self._normalizar_nombre_key(nombre_raw)
                 if key:
                     self.mapa_datos_senadores[key] = {"provincia": provincia, "partido": partido}
-        except Exception:
-            return
+        except Exception as e:
+            print(f"   ⚠️ Error procesando tabla de senadores: {e}")
 
     def _formatear_expediente(self, exp: str, tipo: str) -> str:
         exp = self.limpiar_texto(exp)
@@ -142,7 +303,10 @@ class ScrapearSenado:
         return list(uniq.values())
 
     def _get_autores(self, soup_det: BeautifulSoup):
-        autores_div = soup_det.find("div", {"role": "tabpanel", "id": "Autores"}) or soup_det.find(id=re.compile(r"^Autores$", re.IGNORECASE))
+        autores_div = (
+            soup_det.find("div", {"role": "tabpanel", "id": "Autores"})
+            or soup_det.find(id=re.compile(r"^Autores$", re.IGNORECASE))
+        )
         if not autores_div:
             return ["S/D"]
         autores = []
@@ -155,7 +319,9 @@ class ScrapearSenado:
         return autores if autores else ["S/D"]
 
     def _get_fecha_inicio(self, soup_det: BeautifulSoup):
-        h2 = soup_det.find(lambda tag: tag.name in ("h2", "h3") and "mesa de entradas" in tag.get_text(strip=True).lower())
+        h2 = soup_det.find(
+            lambda tag: tag.name in ("h2", "h3") and "mesa de entradas" in tag.get_text(strip=True).lower()
+        )
         if not h2:
             return "S/D"
         tabla = h2.find_next("table")
@@ -170,7 +336,10 @@ class ScrapearSenado:
         return self.limpiar_texto(tds[0].get_text())
 
     def _get_comisiones(self, soup_det: BeautifulSoup):
-        h2 = soup_det.find(lambda tag: tag.name in ("h2", "h3", "h4") and "giros del expediente a comisiones" in tag.get_text(strip=True).lower())
+        h2 = soup_det.find(
+            lambda tag: tag.name in ("h2", "h3", "h4")
+            and "giros del expediente a comisiones" in tag.get_text(strip=True).lower()
+        )
         if not h2:
             return "S/D"
         tabla = h2.find_next("table")
@@ -216,9 +385,15 @@ class ScrapearSenado:
 
     def extraer_detalle_proyecto(self, url_detalle: str, fallback_extracto="S/D"):
         try:
-            r = self._session.get(url_detalle, timeout=30, allow_redirects=True)
-            if r.status_code != 200:
-                return None
+            r = self._get_con_rotacion(url_detalle)
+            if not r or r.status_code != 200:
+                return {
+                    "Autor": "S/D",
+                    "Fecha de inicio": "S/D",
+                    "Proyecto": fallback_extracto,
+                    "Comisiones": "S/D",
+                    "Link Texto": url_detalle,
+                }
             soup = BeautifulSoup(r.text, "html.parser")
             autores = self._get_autores(soup)
             autor_principal = autores[0] if autores else "S/D"
@@ -235,27 +410,54 @@ class ScrapearSenado:
                 "Comisiones": comisiones,
                 "Link Texto": link_texto
             }
-        except Exception:
-            return None
+        except Exception as e:
+            print(f"   ⚠️ Error extrayendo detalle {url_detalle}: {e}")
+            return {
+                "Autor": "S/D",
+                "Fecha de inicio": "S/D",
+                "Proyecto": fallback_extracto,
+                "Comisiones": "S/D",
+                "Link Texto": url_detalle,
+            }
 
     def scrape(self):
         self.obtener_diccionario_partidos()
         url_listado = "https://www.senado.gob.ar/parlamentario/parlamentaria/avanzada?cantRegistros=100"
         print(f"Entrando a {url_listado}")
 
+        items = []
         try:
             self.driver.get(url_listado)
             WebDriverWait(self.driver, 30).until(
-                lambda d: ("verExp" in (d.page_source or "")) or ("<table" in (d.page_source or "").lower())
+                lambda d: "verExp" in (d.page_source or "")
             )
             soup_listado = BeautifulSoup(self.driver.page_source, "html.parser")
             items = self._extraer_items_listado(soup_listado)
-            if not items:
-                self.driver.quit()
-                return pd.DataFrame(self.data)
-        except Exception:
+        except Exception as e:
+            print(f"   ⚠️ Selenium no encontró listado en Senado ({type(e).__name__}), intentando vía HTTP...")
+
+        try:
             self.driver.quit()
+        except Exception:
+            pass
+
+        if not items:
+            r = self._get_con_rotacion(url_listado)
+            if r and r.status_code == 200 and "verExp" in r.text:
+                soup_listado = BeautifulSoup(r.text, "html.parser")
+                items = self._extraer_items_listado(soup_listado)
+
+        if not items:
+            html_fallback = self._activar_pool_proxies_ar(url_listado, marcador="verExp")
+            if html_fallback:
+                soup_listado = BeautifulSoup(html_fallback, "html.parser")
+                items = self._extraer_items_listado(soup_listado)
+
+        if not items:
+            print("📭 No se pudieron extraer proyectos del listado de Senado.")
             return pd.DataFrame(self.data)
+
+        print(f"Procesando {len(items)} proyectos encontrados en Senado...")
 
         for it in items:
             info = self.extraer_detalle_proyecto(it["url_detalle"], fallback_extracto=it.get("extracto", "S/D"))
@@ -285,5 +487,4 @@ class ScrapearSenado:
 
             time.sleep(0.25)
 
-        self.driver.quit()
         return pd.DataFrame(self.data)
