@@ -1,3 +1,5 @@
+import html as html_lib
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Any
 
@@ -11,13 +13,18 @@ class Seccion:
 class ReporteUI:
     LOGO_CID = "cid:bbva_logo"
 
-    def __init__(self, year_footer: int = 2026):
-        self.year_footer = year_footer
+    def __init__(self, year_footer: int = None):
+        self.year_footer = year_footer or datetime.now().year
         self.secciones = [
             Seccion("boletin", "Boletín Oficial"),
             Seccion("diputados", "Diputados"),
             Seccion("senado", "Senado"),
         ]
+
+    def _esc(self, val: Any) -> str:
+        if val is None:
+            return ""
+        return html_lib.escape(str(val), quote=True)
 
     def header(self) -> str:
         return f"""<!doctype html>
@@ -76,6 +83,19 @@ class ReporteUI:
 </body>
 </html>
 """
+
+    def empty(self, mensaje: str) -> str:
+        counts = {sec.key: 0 for sec in self.secciones}
+        html = self.header()
+        html += self._toc(counts)
+        html += (
+            '<div style="text-align:center;padding:36px 0;color:#58606a;">'
+            '<div style="font-size:16px;color:#06263d;font-weight:700;margin-bottom:6px;">Sin Novedades de Impacto</div>'
+            f'<div>{self._esc(mensaje)}</div>'
+            '</div>'
+        )
+        html += self.footer()
+        return html
 
     def _toc(self, counts: Dict[str, int]) -> str:
         html = (
@@ -161,7 +181,7 @@ class ReporteUI:
                 html += (
                     f'<div style="background:#f3fbff;border-left:4px solid #0a4b7a;'
                     f'padding:10px;border-radius:6px;margin-bottom:12px;color:#1f3642;font-size:14px;">'
-                    f'{resumen}</div>'
+                    f'{self._esc(resumen)}</div>'
                 )
 
             items_email: List[dict] = []
@@ -187,16 +207,17 @@ class ReporteUI:
                 id_ref = str(p.get("id_interno", "")).strip()
                 meta = meta_data_por_id.get(id_ref, {}) if id_ref else {}
 
-                titulo = p.get("titulo_descriptivo") or meta.get("titulo") or "Sin título"
-                ref = p.get("referencia") or meta.get("referencia") or ""
-                just = (p.get("justificacion") or "").strip()
-                link = meta.get("link") or p.get("link") or "#"
-                fuente = meta.get("fuente") or p.get("source") or ""
-                fecha = p.get("fecha") or p.get("date") or ""
+                titulo = self._esc(p.get("titulo_descriptivo") or meta.get("titulo") or "Sin título")
+                ref = self._esc(p.get("referencia") or meta.get("referencia") or "")
+                just = self._esc((p.get("justificacion") or "").strip())
+                link = self._esc(meta.get("link") or p.get("link") or "#")
+                fuente = self._esc(meta.get("fuente") or p.get("source") or "")
+                fecha = self._esc(p.get("fecha") or p.get("date") or "")
 
-                autor = (meta.get("autor") or p.get("autor") or p.get("autor_item") or "").strip()
-                if autor and autor.upper() in ("S/D", "SD", "N/A", "NA"):
-                    autor = ""
+                autor_raw = (meta.get("autor") or p.get("autor") or p.get("autor_item") or "").strip()
+                if autor_raw and autor_raw.upper() in ("S/D", "SD", "N/A", "NA"):
+                    autor_raw = ""
+                autor = self._esc(autor_raw)
 
                 if impacto == "ALTO":
                     badge_bg = "#b92a2f"
@@ -211,7 +232,7 @@ class ReporteUI:
                     cat_html += (
                         f'<span style="display:inline-block;background:#f1f5f9;color:#475569;'
                         f'padding:6px 9px;border-radius:6px;font-size:11px;font-weight:700;'
-                        f'margin-right:6px;margin-bottom:6px;">{c}</span>'
+                        f'margin-right:6px;margin-bottom:6px;">{self._esc(c)}</span>'
                     )
 
                 html += (

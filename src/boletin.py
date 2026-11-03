@@ -103,7 +103,6 @@ class ScrapearBoletin:
         except Exception:
             pass
 
-        # Deduplicar manteniendo orden
         vistos = set()
         unicos = []
         for c in candidatos:
@@ -201,14 +200,14 @@ class ScrapearBoletin:
 
         return None
 
-    def procesar_detalle_completo(self, link_detalle, id_aviso=""):
+    def procesar_detalle_completo(self, link_detalle):
         """
         Entra al aviso y extrae: Texto, Organismo y Número de Norma real.
         """
         data = {
             "texto": "",
             "organismo": "Poder Ejecutivo",  # Valor por defecto
-            "norma": f"Aviso Oficial ({id_aviso})" if id_aviso else "Aviso Oficial",
+            "norma": "S/N",
         }
 
         try:
@@ -230,9 +229,10 @@ class ScrapearBoletin:
                     # El H2 suele ser la Norma (ej: Comunicación "A" 1234)
                     h2 = header.find("h2")
                     if h2:
-                        norma_txt = h2.get_text(strip=True)
-                        if norma_txt and norma_txt not in ("S/N", "Aviso Oficial"):
-                            data["norma"] = norma_txt
+                        data["norma"] = h2.get_text(strip=True)
+
+                if data["norma"] == "S/N" or not data["norma"]:
+                    data["norma"] = "Aviso Oficial"
 
                 # --- 2. EXTRAER TEXTO ---
                 contenido = (
@@ -251,13 +251,18 @@ class ScrapearBoletin:
 
                     data["texto"] = texto[:15000]
 
+            if data["norma"] == "S/N" or not data["norma"]:
+                data["norma"] = "Aviso Oficial"
             return data
 
         except Exception:
+            if data["norma"] == "S/N" or not data["norma"]:
+                data["norma"] = "Aviso Oficial"
             return data  # Devuelve defaults si falla
 
-    def scrape(self):
+    def scrape(self, links_completos_existentes=None):
         print(f">>> Iniciando scraping ({self.fecha_target_str or 'HOY'})...")
+        links_existentes = links_completos_existentes or {}
 
         try:
             html_portada = self._obtener_portada_con_fallback()
@@ -303,10 +308,25 @@ class ScrapearBoletin:
             for i, item in enumerate(unique_norms):
                 id_aviso = item["id"]
                 link_completo = self.base_url + item["href"]
-
-                info_detalle = self.procesar_detalle_completo(link_completo, id_aviso=id_aviso)
-
                 titulo_final = item["titulo_listado"].replace("Ver", "").strip()
+
+                # Si el link ya existe en la planilla con análisis IA válido, evitamos descargar el detalle de nuevo
+                if link_completo in links_existentes:
+                    fila_guardada = links_existentes[link_completo]
+                    norma_guardada = str(fila_guardada[1]).strip() if len(fila_guardada) > 1 else "Aviso Oficial"
+                    autor_guardado = str(fila_guardada[2]).strip() if len(fila_guardada) > 2 else "Poder Ejecutivo"
+                    datos_procesados.append({
+                        "ID": f"BO{id_aviso}",
+                        "Origen": "Boletin Oficial",
+                        "Expediente": norma_guardada,
+                        "Autor": autor_guardado,
+                        "Fecha de inicio": fecha_excel,
+                        "Proyecto": f"TITULO: {titulo_final}",
+                        "Comisiones": link_completo,
+                    })
+                    continue
+
+                info_detalle = self.procesar_detalle_completo(link_completo)
 
                 if info_detalle["texto"]:
                     contenido_ia = (

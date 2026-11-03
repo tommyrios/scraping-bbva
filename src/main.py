@@ -21,6 +21,7 @@ class GestorEstado:
 
         ids_existentes = []
         self.mapa_existentes = {}
+        self.mapa_links_bo = {}
 
         idx_expediente = 1 if prefijo_id == "BO" else 2
 
@@ -30,21 +31,63 @@ class GestorEstado:
 
             id_val = str(row[0]).strip() if len(row) > 0 else ""
             exp_val = str(row[idx_expediente]).strip() if len(row) > idx_expediente else ""
+            info_fila = {"fila": i + 1, "datos": row}
 
             if exp_val:
-                self.mapa_existentes[exp_val] = {"fila": i + 1, "datos": row}
+                self.mapa_existentes[exp_val] = info_fila
+
+            if self.prefijo == "BO" and len(row) > 6:
+                link_bo = str(row[6]).strip()
+                if link_bo:
+                    self.mapa_links_bo[link_bo] = info_fila
 
             if id_val.startswith(self.prefijo):
                 try:
                     num = int(id_val.replace(self.prefijo, ""))
                     ids_existentes.append(num)
-                except:
+                except Exception:
                     pass
 
         self.proximo_id_num = (max(ids_existentes) + 1) if ids_existentes else 1
 
-    def obtener_datos_existentes(self, expediente):
-        return self.mapa_existentes.get(str(expediente).strip())
+    def tiene_analisis_valido(self, datos_fila: list) -> bool:
+        idx_obs = 5 if self.prefijo == "BO" else 10
+        obs_actual = str(datos_fila[idx_obs]).strip() if len(datos_fila) > idx_obs else ""
+        return bool(obs_actual) and ("Error" not in obs_actual) and (obs_actual.upper() != "S/D")
+
+    def obtener_datos_existentes(self, expediente, link_bo=""):
+        exp_key = str(expediente or "").strip()
+        link_key = str(link_bo or "").strip()
+
+        if self.prefijo == "BO":
+            if link_key and link_key in self.mapa_links_bo:
+                return self.mapa_links_bo[link_key]
+
+            info_por_exp = self.mapa_existentes.get(exp_key)
+            if info_por_exp:
+                datos = info_por_exp["datos"]
+                link_guardado = str(datos[6]).strip() if len(datos) > 6 else ""
+                # Si la fila guardada no tenía link (histórico) o coincide el link, es la misma norma.
+                # Si tiene otro link distinto, es otra norma con igual nombre (ej. "Aviso Oficial" o "Resolución 1/2026").
+                if not link_guardado or not link_key or link_guardado == link_key:
+                    return info_por_exp
+            return None
+
+        return self.mapa_existentes.get(exp_key)
+
+    def obtener_expedientes_completos(self) -> set:
+        return {
+            exp
+            for exp, info in self.mapa_existentes.items()
+            if self.tiene_analisis_valido(info["datos"])
+        }
+
+    def obtener_links_bo_completos(self) -> dict:
+        return {
+            link: info["datos"]
+            for link, info in self.mapa_links_bo.items()
+            if self.tiene_analisis_valido(info["datos"])
+        }
 
     def registrar_nuevo(self):
         id_str = f"{self.prefijo}{self.proximo_id_num:03d}"
@@ -69,7 +112,7 @@ def normalizar_impacto(item: dict) -> str:
 
 def procesar_lote(df_nuevos, gestor, nombre_origen_default, operaciones_globales, filas_ia_globales):
     """
-    - Escribe a Sheets SOLO columnas existentes.
+    - Escribe a Sheets SOLO columnas existentes (sin alterar estructura de la planilla).
     - NO guarda Link Texto en Sheets (solo se usa en reporte/IA).
     """
     stats = {"nuevos": 0, "reanalizados": 0, "omitidos": 0}
@@ -79,7 +122,8 @@ def procesar_lote(df_nuevos, gestor, nombre_origen_default, operaciones_globales
 
     nuevos_reales_count = 0
     for _, row in df_nuevos.iterrows():
-        if not gestor.obtener_datos_existentes(row.get("Expediente")):
+        link_bo = str(row.get("Comisiones", "")).strip() if gestor.prefijo == "BO" else ""
+        if not gestor.obtener_datos_existentes(row.get("Expediente"), link_bo=link_bo):
             nuevos_reales_count += 1
 
     if nuevos_reales_count > 0:
@@ -99,16 +143,16 @@ def procesar_lote(df_nuevos, gestor, nombre_origen_default, operaciones_globales
         partido = str(row.get("Partido Político", "")).strip()
         provincia = str(row.get("Provincia", "")).strip()
 
-        info_existente = gestor.obtener_datos_existentes(exp_web)
+        info_existente = gestor.obtener_datos_existentes(
+            exp_web,
+            link_bo=comisiones_o_link_bo if gestor.prefijo == "BO" else "",
+        )
 
         if info_existente:
             datos_viejos = info_existente["datos"]
             fila_excel = info_existente["fila"]
 
-            idx_obs = 5 if gestor.prefijo == "BO" else 10
-            obs_actual = str(datos_viejos[idx_obs]).strip() if len(datos_viejos) > idx_obs else ""
-
-            if (not obs_actual) or ("Error" in obs_actual):
+            if not gestor.tiene_analisis_valido(datos_viejos):
                 stats["reanalizados"] += 1
 
                 if gestor.prefijo == "BO":
@@ -116,10 +160,10 @@ def procesar_lote(df_nuevos, gestor, nombre_origen_default, operaciones_globales
                     link_reporte_final = comisiones_o_link_bo
                 else:
                     origen_final = str(datos_viejos[1]).strip() if len(datos_viejos) > 1 else nombre_origen_default
-                    link_reporte_final = ""
+                    link_reporte_final = link_para_reporte
 
                 fila_ia = [
-                    datos_viejos[0],  
+                    datos_viejos[0],
                     origen_final,
                     exp_web,
                     autor,
@@ -138,13 +182,13 @@ def procesar_lote(df_nuevos, gestor, nombre_origen_default, operaciones_globales
 
             if gestor.prefijo == "BO":
                 valores = [
-                    id_nuevo,              
-                    exp_web,               
-                    autor,                 
-                    fecha,                 
-                    "",                    
-                    "",                    
-                    comisiones_o_link_bo   
+                    id_nuevo,
+                    exp_web,
+                    autor,
+                    fecha,
+                    "",
+                    "",
+                    comisiones_o_link_bo
                 ]
                 rango = f"A{fila_excel}:G{fila_excel}"
                 origen_final = nombre_origen_default
@@ -153,22 +197,29 @@ def procesar_lote(df_nuevos, gestor, nombre_origen_default, operaciones_globales
                 origen_final = str(row.get("Cámara de Origen") or nombre_origen_default).strip() or nombre_origen_default
 
                 valores = [
-                    id_nuevo,             
-                    origen_final,          
-                    exp_web,               
-                    autor,                 
-                    fecha,                 
-                    proyecto,              
-                    comisiones_o_link_bo,  
-                    "",                   
-                    partido,               
-                    provincia,             
-                    ""                  
+                    id_nuevo,
+                    origen_final,
+                    exp_web,
+                    autor,
+                    fecha,
+                    proyecto,
+                    comisiones_o_link_bo,
+                    "",
+                    partido,
+                    provincia,
+                    ""
                 ]
                 rango = f"A{fila_excel}:K{fila_excel}"
 
             valores = [str(x) if pd.notna(x) else "" for x in valores]
             operaciones_globales.append({"range": rango, "values": [valores]})
+
+            # Actualizar mapas en memoria para evitar duplicados dentro del mismo lote
+            info_nueva = {"fila": fila_excel, "datos": valores}
+            if exp_web:
+                gestor.mapa_existentes[exp_web] = info_nueva
+            if gestor.prefijo == "BO" and comisiones_o_link_bo:
+                gestor.mapa_links_bo[comisiones_o_link_bo] = info_nueva
 
             fila_ia = [
                 id_nuevo,
@@ -212,6 +263,9 @@ if __name__ == "__main__":
         gestor_proy = GestorEstado(sheet_proy, "PL")
         gestor_bo = GestorEstado(sheet_bo, "BO")
 
+        expedientes_proy_completos = gestor_proy.obtener_expedientes_completos()
+        links_bo_completos = gestor_bo.obtener_links_bo_completos()
+
         filas_ia_globales = []
         batch_proy = []
         batch_bo = []
@@ -219,7 +273,10 @@ if __name__ == "__main__":
         # --- DIPUTADOS ---
         print(">>> Diputados...")
         try:
-            df = ScrapearDiputados().scrape("https://www.diputados.gov.ar/proyectos/")
+            df = ScrapearDiputados().scrape(
+                "https://www.diputados.gov.ar/proyectos/",
+                expedientes_completos=expedientes_proy_completos,
+            )
             if df is not None and not df.empty:
                 df = df.iloc[::-1]
             st = procesar_lote(df, gestor_proy, "Diputados", batch_proy, filas_ia_globales)
@@ -230,7 +287,7 @@ if __name__ == "__main__":
         # --- SENADO ---
         print(">>> Senado...")
         try:
-            df = ScrapearSenado().scrape()
+            df = ScrapearSenado().scrape(expedientes_completos=expedientes_proy_completos)
             if df is not None and not df.empty:
                 df = df.iloc[::-1]
             st = procesar_lote(df, gestor_proy, "Senado", batch_proy, filas_ia_globales)
@@ -241,7 +298,7 @@ if __name__ == "__main__":
         # --- BOLETIN ---
         print(">>> Boletín...")
         try:
-            df = ScrapearBoletin().scrape()
+            df = ScrapearBoletin().scrape(links_completos_existentes=links_bo_completos)
             st = procesar_lote(df, gestor_bo, "Boletin Oficial", batch_bo, filas_ia_globales)
             print(f"   Resultados: {st['nuevos']} nuevos | {st['reanalizados']} reanalizados | {st['omitidos']} omitidos")
         except Exception as e:
@@ -275,16 +332,22 @@ if __name__ == "__main__":
                 impacto_nivel = normalizar_impacto(item)
                 just = str(item.get("justificacion", "")).strip()
 
+                # Si la IA falló en todos los modelos para este ítem, no escribimos un valor definitivo
+                # para que en la siguiente corrida se reanalice automáticamente.
+                es_error_ia = ("Error IA" in just) or (just.upper() == "S/D")
+
                 if id_ref.startswith("BO"):
                     # BO: Impacto en E, Justificación en F
-                    if impacto_nivel:
+                    if impacto_nivel and not es_error_ia:
                         updates_bo_ia.append({"range": f"E{fila}", "values": [[impacto_nivel]]})
-                    updates_bo_ia.append({"range": f"F{fila}", "values": [[just]]})
+                    if just and not es_error_ia:
+                        updates_bo_ia.append({"range": f"F{fila}", "values": [[just]]})
                 else:
                     # PROY: Impacto en H, Observaciones/Justificación en K
-                    if impacto_nivel:
+                    if impacto_nivel and not es_error_ia:
                         updates_proy_ia.append({"range": f"H{fila}", "values": [[impacto_nivel]]})
-                    updates_proy_ia.append({"range": f"K{fila}", "values": [[just]]})
+                    if just and not es_error_ia:
+                        updates_proy_ia.append({"range": f"K{fila}", "values": [[just]]})
 
             if updates_proy_ia:
                 sheet_proy.batch_update(updates_proy_ia, value_input_option="USER_ENTERED")

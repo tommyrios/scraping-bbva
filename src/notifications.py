@@ -1,5 +1,6 @@
 import os
 import smtplib
+from datetime import datetime
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -14,7 +15,7 @@ class MensajeSender:
         destinatarios_str = os.environ.get("EMAIL_DESTINATARIO", "")
         self.destinatarios = [d.strip() for d in destinatarios_str.split(",") if d.strip()]
 
-    def enviar_difusion(self, contenido_html, asunto="Reporte Regulatorio BBVA"):
+    def enviar_difusion(self, contenido_html, asunto=None):
         if not self.email_user or not self.email_pass:
             print("❌ Faltan credenciales de correo.")
             return
@@ -22,6 +23,10 @@ class MensajeSender:
         if not self.destinatarios:
             print("❌ No hay destinatarios definidos.")
             return
+
+        if not asunto:
+            fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+            asunto = f"Reporte Regulatorio BBVA - {fecha_hoy}"
 
         msg = MIMEMultipart('related')
         alt = MIMEMultipart('alternative')
@@ -47,7 +52,7 @@ class MensajeSender:
                 print(f"⚠️ No se pudo adjuntar el logo inline: {e}")
 
         try:
-            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
             server.starttls()
             server.login(self.email_user, self.email_pass)
             server.send_message(msg)

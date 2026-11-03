@@ -1,29 +1,35 @@
 import os
+import re
 import json
 import time
+from datetime import datetime
+from urllib.parse import quote_plus
 from google import genai
 from google.genai import types
 from reporte import ReporteUI
 
 
 class AnalistaLegislativo:
+    MAX_ITEMS_POR_LOTE = 15
+
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key) if api_key else None
-        self.ui = ReporteUI(year_footer=2026)
+        self.ui = ReporteUI(year_footer=datetime.now().year)
 
     def generar_link(self, origen, expediente):
         exp = (expediente or "").strip()
         if not exp:
             return ""
+        exp_q = quote_plus(f'"{exp}"')
         o = (origen or "").lower()
         if "diput" in o:
-            return f"https://www.google.com/search?q=site:diputados.gov.ar+%22{exp}%22"
+            return f"https://www.google.com/search?q=site:diputados.gov.ar+{exp_q}"
         if "senad" in o:
-            return f"https://www.google.com/search?q=site:senado.gob.ar+%22{exp}%22"
+            return f"https://www.google.com/search?q=site:senado.gob.ar+{exp_q}"
         if "bolet" in o:
-            return f"https://www.google.com/search?q=site:boletinoficial.gob.ar+%22{exp}%22"
-        return f"https://www.google.com/search?q=%22{exp}%22"
+            return f"https://www.google.com/search?q=site:boletinoficial.gob.ar+{exp_q}"
+        return f"https://www.google.com/search?q={exp_q}"
 
     def _seccion_esperada(self, origen: str, id_interno: str) -> str:
         o = (origen or "").lower()
@@ -101,25 +107,34 @@ class AnalistaLegislativo:
             return default
 
     def _normalize_id(self, v) -> str:
-        s = self._coerce_text(v).strip()
-        return s
+        return self._coerce_text(v).strip()
 
     def _extract_title(self, contenido: str) -> str:
         txt = self._coerce_text(contenido)
-        first = txt.split("\n")[0].strip() if txt else ""
-        if not first:
+        if not txt:
             return ""
+        for line in txt.splitlines():
+            clean = line.strip()
+            if clean.upper().startswith("TITULO:"):
+                return clean[len("TITULO:"):].strip(" :")
+        first = txt.split("\n")[0].strip()
         for prefix in ("TITULO:", "TITULO", "NORMA:", "NORMA"):
             if first.upper().startswith(prefix):
                 first = first[len(prefix):].strip(" :")
                 break
         return first.strip()
 
-    def _fallback_analysis(self, items_para_modelo, meta_data_por_id):
+    def _limpiar_json_raw(self, raw: str) -> str:
+        s = (raw or "").strip()
+        if s.startswith("```"):
+            s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
+            s = re.sub(r"\s*```$", "", s)
+        return s.strip()
+
+    def _crear_items_fallback(self, items_lote, meta_data_por_id):
         secciones = ("boletin", "diputados", "senado")
         data_norm = {k: {"resumen": "", "items": []} for k in secciones}
-        detalles = []
-        for it in items_para_modelo:
+        for it in items_lote:
             sec = it.get("seccion_esperada") or "diputados"
             if sec not in secciones:
                 sec = "diputados"
@@ -132,10 +147,14 @@ class AnalistaLegislativo:
                 "titulo_descriptivo": titulo or ref or iid,
                 "impacto_nivel": "BAJO",
                 "categorias": [],
-                "justificacion": "S/D",
+                "justificacion": "Error IA: pendiente de reanálisis",
             }
             data_norm[sec]["items"].append(obj)
-            detalles.append(obj)
+        return data_norm
+
+    def _fallback_analysis(self, items_para_modelo, meta_data_por_id):
+        data_norm = self._crear_items_fallback(items_para_modelo, meta_data_por_id)
+        detalles = self._unique_detalles(data_norm)
         html = self.ui.render(
             data_norm=data_norm,
             meta_data_por_id=meta_data_por_id,
@@ -194,6 +213,79 @@ class AnalistaLegislativo:
                 out.append(it)
         return out
 
+    def _construir_prompt(self, lote_items):
+        return f"""
+Actúa como un analista legislativo y regulatorio senior para Banco BBVA Argentina (Estilo Agencia de Noticias).
+Analiza los siguientes items del Boletín Oficial y del Congreso de la Nación.
+
+TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno. No inventes datos.
+
+REGLA DE CLASIFICACIÓN (OBLIGATORIA):
+- Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
+- Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
+- Debes devolver TODOS los items recibidos en el input sin omitir ninguno.
+
+SALIDA OBLIGATORIA: Devuelve SOLO un JSON válido, sin texto adicional, con esta estructura EXACTA:
+{{
+  "boletin": {{"resumen": "...", "items": []}},
+  "diputados": {{"resumen": "...", "items": []}},
+  "senado": {{"resumen": "...", "items": []}}
+}}
+
+Cada item debe tener:
+- id_interno
+- referencia
+- titulo_descriptivo
+- impacto_nivel: ALTO|MEDIO|BAJO
+- categorias: lista (1 a 4)
+- justificacion (máx 2 líneas explicando el impacto concreto para el banco/sector)
+
+REGLAS DE IMPACTO PARA BBVA ARGENTINA:
+- ALTO:
+  1) Toda RENUNCIA, ACEPTACIÓN DE RENUNCIA, CESE, DESIGNACIÓN o NOMBRAMIENTO de funcionarios públicos.
+  2) Normativas o proyectos que afecten directamente a bancos y entidades financieras (BCRA, CNV, UIF, ARCA/AFIP, Ministerio de Economía / Secretaría de Finanzas), tasas de interés, encajes, mercado de cambios (MULC), tarjetas de crédito, medios de pago/fintech, impuestos bancarios (débitos/créditos, ingresos brutos), créditos hipotecarios/UVA, defensa del consumidor financiero o régimen laboral bancario.
+- MEDIO:
+  Normas o proyectos impositivos, comerciales, laborales generales, mercado de capitales, seguros, prevención de lavado, ciberseguridad/datos personales, deuda pública o regulaciones sectoriales que afecten indirectamente la operatoria o cartera de clientes del banco.
+- BAJO:
+  Declaraciones de interés, beneplácitos, efemérides, trámites administrativos internos de organismos no financieros o temas sin vinculación con la actividad bancaria/económica.
+
+Datos a analizar:
+{json.dumps(lote_items, ensure_ascii=False)}
+""".strip()
+
+    def _analizar_lote_con_modelos(self, lote_items, seccion_esperada_por_id, meta_data_por_id):
+        prompt = self._construir_prompt(lote_items)
+        modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+        retryable_markers = ("503", "overloaded", "429", "quota", "resource has been exhausted", "temporarily")
+
+        for modelo in modelos:
+            for _ in range(3):
+                try:
+                    response = self.client.models.generate_content(
+                        model=modelo,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json"),
+                    )
+                    raw = self._limpiar_json_raw(getattr(response, "text", None))
+                    if not raw:
+                        raise ValueError("Respuesta vacía del modelo")
+                    data = json.loads(raw)
+                    return self._normalize_model_output(data, seccion_esperada_por_id)
+
+                except Exception as e:
+                    txt = str(e).lower()
+                    if any(m in txt for m in ["429", "resource_exhausted", "quota", "limit"]):
+                        print(f"   ⏳ Límite de cuota en {modelo}. Esperando 60 segundos...")
+                        time.sleep(61)
+                        continue
+
+                    if any(m in txt for m in retryable_markers):
+                        time.sleep(10)
+                        continue
+                    break
+
+        return self._crear_items_fallback(lote_items, meta_data_por_id)
+
     def analizar_proyectos(self, filas_nuevas):
         if not filas_nuevas or not isinstance(filas_nuevas, list):
             return self._ui_empty_safe("No se han detectado nuevas normas o proyectos para analizar en este momento."), []
@@ -246,84 +338,48 @@ class AnalistaLegislativo:
         if not self.client:
             return self._fallback_analysis(items_para_modelo, meta_data_por_id)
 
-        prompt = f"""
-Actúa como un analista legislativo senior para Banco BBVA (Estilo Agencia de Noticias).
-Analiza los siguientes items del Boletín Oficial y Congreso.
+        secciones = ("boletin", "diputados", "senado")
+        data_acumulada = {k: {"resumen": "", "items": []} for k in secciones}
+        resumenes_por_seccion = {k: [] for k in secciones}
 
-TU OBJETIVO: Precisión absoluta. Prohibido usar frases genéricas de relleno. No inventes datos.
+        total_items = len(items_para_modelo)
+        lotes = [
+            items_para_modelo[i : i + self.MAX_ITEMS_POR_LOTE]
+            for i in range(0, total_items, self.MAX_ITEMS_POR_LOTE)
+        ]
 
-REGLA DE CLASIFICACIÓN (OBLIGATORIA):
-- Cada item del input trae el campo "seccion_esperada" con valor: "boletin" | "diputados" | "senado".
-- Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
+        for idx_lote, lote in enumerate(lotes, start=1):
+            if len(lotes) > 1:
+                print(f"   🤖 Analizando lote IA {idx_lote}/{len(lotes)} ({len(lote)} ítems)...")
+            parcial = self._analizar_lote_con_modelos(lote, seccion_esperada_por_id, meta_data_por_id)
 
-SALIDA OBLIGATORIA: Devuelve SOLO un JSON válido, sin texto adicional, con esta estructura EXACTA:
-{{
-  "boletin": {{"resumen": "...", "items": []}},
-  "diputados": {{"resumen": "...", "items": []}},
-  "senado": {{"resumen": "...", "items": []}}
-}}
+            # Verificar que ningún ítem del lote haya sido omitido por el modelo
+            ids_devueltos = {
+                str(it.get("id_interno") or "").strip()
+                for sec in secciones
+                for it in parcial.get(sec, {}).get("items", [])
+                if isinstance(it, dict)
+            }
+            faltantes = [it for it in lote if str(it.get("id_interno") or "").strip() not in ids_devueltos]
+            if faltantes:
+                fb_faltantes = self._crear_items_fallback(faltantes, meta_data_por_id)
+                for sec in secciones:
+                    parcial[sec]["items"].extend(fb_faltantes[sec]["items"])
 
-Cada item debe tener:
-- id_interno
-- referencia
-- titulo_descriptivo
-- impacto_nivel: ALTO|MEDIO|BAJO
-- categorias: lista (1 a 4)
-- justificacion (máx 2 líneas)
+            for sec in secciones:
+                res_sec = (parcial.get(sec, {}).get("resumen") or "").strip()
+                if res_sec and res_sec not in resumenes_por_seccion[sec]:
+                    resumenes_por_seccion[sec].append(res_sec)
+                data_acumulada[sec]["items"].extend(parcial.get(sec, {}).get("items", []))
 
-REGLAS DE IMPACTO:
-- Toda RENUNCIA/ACEPTACIÓN DE RENUNCIA/CESE de funcionarios: ALTO.
-- Toda DESIGNACIÓN/NOMBRAMIENTO de funcionarios: ALTO.
+        for sec in secciones:
+            data_acumulada[sec]["resumen"] = " ".join(resumenes_por_seccion[sec]).strip()
 
-Datos a analizar:
-{json.dumps(items_para_modelo, ensure_ascii=False)}
-""".strip()
-
-        modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
-        retryable_markers = ("503", "overloaded", "429", "quota", "Resource has been exhausted", "temporarily")
-
-        last_err = None
-        for modelo in modelos:
-            for _ in range(3):
-                try:
-                    response = self.client.models.generate_content(
-                        model=modelo,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json"),
-                    )
-                    raw = getattr(response, "text", None)
-                    if not raw:
-                        raise ValueError("Respuesta vacía del modelo")
-                    data = json.loads(raw)
-                    data_norm = self._normalize_model_output(data, seccion_esperada_por_id)
-                    detalles = self._unique_detalles(data_norm)
-
-                    html_output = self.ui.render(
-                        data_norm=data_norm,
-                        meta_data_por_id=meta_data_por_id,
-                        impacto_normalizer=self._normalizar_impacto,
-                        categorias_normalizer=self._normalizar_categorias,
-                    )
-                    return html_output, detalles
-
-                except Exception as e:
-                    last_err = e
-                    txt = str(e).lower()
-
-                    if any(m in txt for m in ["429", "resource_exhausted", "quota", "limit"]):
-                        print("Límite gratuito alcanzado. Esperando 60 segundos.")
-                        time.sleep(61) 
-                        continue
-                                
-                    if any(m in txt for m in retryable_markers):
-                        time.sleep(10)
-                        continue
-                    break
-
-        try:
-            return self._fallback_analysis(items_para_modelo, meta_data_por_id)
-        except Exception:
-            msg = f"Ocurrió un error al procesar el análisis con Inteligencia Artificial."
-            if last_err:
-                msg = f"{msg} ({str(last_err)[:160]})"
-            return self._ui_empty_safe(msg), []
+        detalles = self._unique_detalles(data_acumulada)
+        html_output = self.ui.render(
+            data_norm=data_acumulada,
+            meta_data_por_id=meta_data_por_id,
+            impacto_normalizer=self._normalizar_impacto,
+            categorias_normalizer=self._normalizar_categorias,
+        )
+        return html_output, detalles

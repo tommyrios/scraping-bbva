@@ -44,10 +44,13 @@ class ScrapearSenado:
             options.add_argument(f"--proxy-server={self.proxy_url}")
         options.page_load_strategy = "eager"
 
-        self.driver = webdriver.Chrome(
-            service=ChromeService(ChromeDriverManager().install()),
-            options=options
-        )
+        try:
+            self.driver = webdriver.Chrome(
+                service=ChromeService(ChromeDriverManager().install()),
+                options=options
+            )
+        except Exception:
+            self.driver = webdriver.Chrome(options=options)
 
         self.data = []
         self.mapa_datos_senadores = {}
@@ -82,6 +85,13 @@ class ScrapearSenado:
                 "http": self.proxy_url,
                 "https": self.proxy_url,
             })
+
+    def _cerrar_driver(self):
+        try:
+            if self.driver:
+                self.driver.quit()
+        except Exception:
+            pass
 
     def _descubrir_proxies_argentina(self):
         candidatos = []
@@ -420,26 +430,25 @@ class ScrapearSenado:
                 "Link Texto": url_detalle,
             }
 
-    def scrape(self):
-        self.obtener_diccionario_partidos()
-        url_listado = "https://www.senado.gob.ar/parlamentario/parlamentaria/avanzada?cantRegistros=100"
-        print(f"Entrando a {url_listado}")
-
-        items = []
+    def scrape(self, expedientes_completos=None):
+        ya_completos = expedientes_completos or set()
         try:
-            self.driver.get(url_listado)
-            WebDriverWait(self.driver, 30).until(
-                lambda d: "verExp" in (d.page_source or "")
-            )
-            soup_listado = BeautifulSoup(self.driver.page_source, "html.parser")
-            items = self._extraer_items_listado(soup_listado)
-        except Exception as e:
-            print(f"   ⚠️ Selenium no encontró listado en Senado ({type(e).__name__}), intentando vía HTTP...")
+            self.obtener_diccionario_partidos()
+            url_listado = "https://www.senado.gob.ar/parlamentario/parlamentaria/avanzada?cantRegistros=100"
+            print(f"Entrando a {url_listado}")
 
-        try:
-            self.driver.quit()
-        except Exception:
-            pass
+            items = []
+            try:
+                self.driver.get(url_listado)
+                WebDriverWait(self.driver, 30).until(
+                    lambda d: "verExp" in (d.page_source or "")
+                )
+                soup_listado = BeautifulSoup(self.driver.page_source, "html.parser")
+                items = self._extraer_items_listado(soup_listado)
+            except Exception as e:
+                print(f"   ⚠️ Selenium no encontró listado en Senado ({type(e).__name__}), intentando vía HTTP...")
+        finally:
+            self._cerrar_driver()
 
         if not items:
             r = self._get_con_rotacion(url_listado)
@@ -460,6 +469,26 @@ class ScrapearSenado:
         print(f"Procesando {len(items)} proyectos encontrados en Senado...")
 
         for it in items:
+            exp_id = it.get("expediente_id", "S/D")
+
+            # Si el expediente ya figura en la planilla con análisis IA válido, evitamos pedir el detalle HTTP
+            if exp_id in ya_completos:
+                self.data.append({
+                    "Cámara de Origen": "Senado",
+                    "Expediente": exp_id,
+                    "Autor": "S/D",
+                    "Fecha de inicio": "S/D",
+                    "Proyecto": it.get("extracto", "S/D"),
+                    "Comisiones": "S/D",
+                    "Link Texto": it["url_detalle"],
+                    "Estado": "",
+                    "Probabilidad": "",
+                    "Partido Político": "",
+                    "Provincia": "",
+                    "Observaciones": ""
+                })
+                continue
+
             info = self.extraer_detalle_proyecto(it["url_detalle"], fallback_extracto=it.get("extracto", "S/D"))
             if not info:
                 continue
@@ -472,7 +501,7 @@ class ScrapearSenado:
 
             self.data.append({
                 "Cámara de Origen": "Senado",
-                "Expediente": it.get("expediente_id", "S/D"),
+                "Expediente": exp_id,
                 "Autor": autor_para_mostrar,
                 "Fecha de inicio": info.get("Fecha de inicio", "S/D"),
                 "Proyecto": info.get("Proyecto", "S/D"),
