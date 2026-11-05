@@ -2,9 +2,9 @@ name: Reporte Regulatorio Diario
 
 on:
   schedule:
-    # 10:45 UTC = 07:45 AM Argentina (UTC-3), contemplando la demora de cola de GitHub Actions
-    # para que el reporte se ejecute y llegue a las 08:00 AM de Argentina (Lunes a Viernes).
-    - cron: '45 10 * * 1-5'
+    # GitHub Actions aplica una demora de cola de ~7 horas en el evento 'schedule' de este repositorio.
+    # Programado a las 03:30 UTC para que, tras la cola de GitHub (~7h), se ejecute entre las 10:30 y 11:00 UTC (07:30 - 08:00 AM Argentina).
+    - cron: '30 03 * * 1-5'
   workflow_dispatch:
 
 jobs:
