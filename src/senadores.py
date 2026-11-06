@@ -176,13 +176,19 @@ class ScrapearSenado:
             return html_ok
         return None
 
-    def _get_con_rotacion(self, url):
+    def _get_con_rotacion(self, url, activar_proxies_si_falla=False):
         try:
             r = self._session.get(url, timeout=(12, 25), allow_redirects=True)
             if r.status_code == 200:
                 return r
         except Exception:
             pass
+
+        if not self.proxy_pool and activar_proxies_si_falla:
+            self._activar_pool_proxies_ar(
+                "https://www.senado.gob.ar/parlamentario/parlamentaria/avanzada?cantRegistros=100",
+                marcador="verExp",
+            )
 
         for proxy_url in list(self.proxy_pool):
             try:
@@ -395,7 +401,7 @@ class ScrapearSenado:
 
     def extraer_detalle_proyecto(self, url_detalle: str, fallback_extracto="S/D"):
         try:
-            r = self._get_con_rotacion(url_detalle)
+            r = self._get_con_rotacion(url_detalle, activar_proxies_si_falla=True)
             if not r or r.status_code != 200:
                 return {
                     "Autor": "S/D",

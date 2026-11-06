@@ -55,6 +55,15 @@ class GestorEstado:
         obs_actual = str(datos_fila[idx_obs]).strip() if len(datos_fila) > idx_obs else ""
         return bool(obs_actual) and ("Error" not in obs_actual) and (obs_actual.upper() != "S/D")
 
+    def tiene_datos_detalle_incompletos(self, datos_fila: list) -> bool:
+        if self.prefijo == "BO":
+            return False
+        autor_actual = str(datos_fila[3]).strip() if len(datos_fila) > 3 else ""
+        fecha_actual = str(datos_fila[4]).strip() if len(datos_fila) > 4 else ""
+        return (not autor_actual or autor_actual.upper() == "S/D") or (
+            not fecha_actual or fecha_actual.upper() == "S/D"
+        )
+
     def obtener_datos_existentes(self, expediente, link_bo=""):
         exp_key = str(expediente or "").strip()
         link_key = str(link_bo or "").strip()
@@ -80,6 +89,7 @@ class GestorEstado:
             exp
             for exp, info in self.mapa_existentes.items()
             if self.tiene_analisis_valido(info["datos"])
+            and not self.tiene_datos_detalle_incompletos(info["datos"])
         }
 
     def obtener_links_bo_completos(self) -> dict:
@@ -152,18 +162,63 @@ def procesar_lote(df_nuevos, gestor, nombre_origen_default, operaciones_globales
             datos_viejos = info_existente["datos"]
             fila_excel = info_existente["fila"]
 
+            # Si una fila existente de Proyectos tenía Autor/Fecha/Comisiones en S/D y ahora se obtuvieron datos válidos,
+            # completamos esas columnas respetando el mismo formato A:K de la planilla.
+            if (
+                gestor.prefijo != "BO"
+                and gestor.tiene_datos_detalle_incompletos(datos_viejos)
+                and ((autor and autor.upper() != "S/D") or (fecha and fecha.upper() != "S/D"))
+            ):
+                operaciones_globales.append(
+                    {
+                        "range": f"D{fila_excel}:G{fila_excel}",
+                        "values": [[autor, fecha, proyecto, comisiones_o_link_bo]],
+                    }
+                )
+                operaciones_globales.append(
+                    {
+                        "range": f"I{fila_excel}:J{fila_excel}",
+                        "values": [[partido, provincia]],
+                    }
+                )
+
             if not gestor.tiene_analisis_valido(datos_viejos):
                 stats["reanalizados"] += 1
+                id_viejo = str(datos_viejos[0]).strip() if len(datos_viejos) > 0 else ""
 
                 if gestor.prefijo == "BO":
                     origen_final = nombre_origen_default
                     link_reporte_final = comisiones_o_link_bo
+                    valores_re = [
+                        id_viejo,
+                        exp_web,
+                        autor,
+                        fecha,
+                        "",
+                        "",
+                        comisiones_o_link_bo,
+                    ]
+                    operaciones_globales.append({"range": f"A{fila_excel}:G{fila_excel}", "values": [valores_re]})
                 else:
-                    origen_final = str(datos_viejos[1]).strip() if len(datos_viejos) > 1 else nombre_origen_default
+                    origen_final = str(datos_viejos[1]).strip() if len(datos_viejos) > 1 and str(datos_viejos[1]).strip() else nombre_origen_default
                     link_reporte_final = link_para_reporte
+                    valores_re = [
+                        id_viejo,
+                        origen_final,
+                        exp_web,
+                        autor if (autor and autor.upper() != "S/D") else (str(datos_viejos[3]).strip() if len(datos_viejos) > 3 else "S/D"),
+                        fecha if (fecha and fecha.upper() != "S/D") else (str(datos_viejos[4]).strip() if len(datos_viejos) > 4 else "S/D"),
+                        proyecto,
+                        comisiones_o_link_bo if (comisiones_o_link_bo and comisiones_o_link_bo.upper() != "S/D") else (str(datos_viejos[6]).strip() if len(datos_viejos) > 6 else "S/D"),
+                        "",
+                        partido or (str(datos_viejos[8]).strip() if len(datos_viejos) > 8 else ""),
+                        provincia or (str(datos_viejos[9]).strip() if len(datos_viejos) > 9 else ""),
+                        "",
+                    ]
+                    operaciones_globales.append({"range": f"A{fila_excel}:K{fila_excel}", "values": [valores_re]})
 
                 fila_ia = [
-                    datos_viejos[0],
+                    id_viejo,
                     origen_final,
                     exp_web,
                     autor,
