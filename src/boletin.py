@@ -249,7 +249,7 @@ class ScrapearBoletin:
                     texto = texto.replace("Boletín Oficial de la República Argentina", "")
                     texto = re.sub(r"e\.\s+\d{2}/\d{2}/.*", "", texto)
 
-                    data["texto"] = texto[:15000]
+                    data["texto"] = texto[:6000]
 
             if data["norma"] == "S/N" or not data["norma"]:
                 data["norma"] = "Aviso Oficial"

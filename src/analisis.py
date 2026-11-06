@@ -10,10 +10,12 @@ from reporte import ReporteUI
 
 
 class AnalistaLegislativo:
-    MAX_ITEMS_POR_LOTE = 15
+    MAX_ITEMS_POR_LOTE = 18
 
     def __init__(self):
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+        if not api_key:
+            print("   ⚠️ Advertencia: GEMINI_API_KEY está vacía o no definida en el entorno.")
         self.client = genai.Client(api_key=api_key) if api_key else None
         self.ui = ReporteUI(year_footer=datetime.now().year)
 
@@ -129,6 +131,21 @@ class AnalistaLegislativo:
         if s.startswith("```"):
             s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
             s = re.sub(r"\s*```$", "", s)
+        # Si el modelo agregó texto antes o después del objeto/lista JSON, recortar a los delimitadores externos
+        if s and not (s.startswith("{") or s.startswith("[")):
+            idx_obj = s.find("{")
+            idx_arr = s.find("[")
+            starts = [i for i in (idx_obj, idx_arr) if i != -1]
+            if starts:
+                s = s[min(starts):]
+        if s.startswith("{") and not s.endswith("}"):
+            r_idx = s.rfind("}")
+            if r_idx != -1:
+                s = s[: r_idx + 1]
+        elif s.startswith("[") and not s.endswith("]"):
+            r_idx = s.rfind("]")
+            if r_idx != -1:
+                s = s[: r_idx + 1]
         return s.strip()
 
     def _crear_items_fallback(self, items_lote, meta_data_por_id):
@@ -166,28 +183,35 @@ class AnalistaLegislativo:
     def _normalize_model_output(self, data, seccion_esperada_por_id):
         secciones = ("boletin", "diputados", "senado")
         data_norm = {k: {"resumen": "", "items": []} for k in secciones}
-        if not isinstance(data, dict):
-            return data_norm
-
-        for k in secciones:
-            bloque = data.get(k, {})
-            if isinstance(bloque, dict):
-                data_norm[k]["resumen"] = self._coerce_text(bloque.get("resumen") or "").strip()
 
         items_flat = []
-        for k in secciones:
-            bloque = data.get(k, {})
-            if isinstance(bloque, dict):
-                items_k = bloque.get("items", [])
-                if isinstance(items_k, list):
-                    items_flat.extend(items_k)
+        if isinstance(data, list):
+            items_flat.extend(data)
+        elif isinstance(data, dict):
+            # Mapear claves case-insensitive
+            lower_map = {str(k).lower().strip(): v for k, v in data.items()}
+            for k in secciones:
+                bloque = lower_map.get(k, {})
+                if isinstance(bloque, dict):
+                    data_norm[k]["resumen"] = self._coerce_text(bloque.get("resumen") or "").strip()
+                    items_k = bloque.get("items", [])
+                    if isinstance(items_k, list):
+                        items_flat.extend(items_k)
+                elif isinstance(bloque, list):
+                    items_flat.extend(bloque)
+
+            if not items_flat and isinstance(lower_map.get("items"), list):
+                items_flat.extend(lower_map["items"])
+        else:
+            return data_norm
 
         for it in items_flat:
             if not isinstance(it, dict):
                 continue
-            iid = str(it.get("id_interno") or "").strip()
+            iid = str(it.get("id_interno") or it.get("id") or "").strip()
             if not iid:
                 continue
+            it["id_interno"] = iid
             sec = seccion_esperada_por_id.get(iid)
             if sec not in secciones:
                 sec = "boletin" if iid.startswith("BO") else "diputados"
@@ -233,7 +257,7 @@ SALIDA OBLIGATORIA: Devuelve SOLO un JSON válido, sin texto adicional, con esta
 }}
 
 Cada item debe tener:
-- id_interno
+- id_interno (exactamente igual al recibido, ej. BO4428 o PL123)
 - referencia
 - titulo_descriptivo
 - impacto_nivel: ALTO|MEDIO|BAJO
@@ -253,38 +277,69 @@ Datos a analizar:
 {json.dumps(lote_items, ensure_ascii=False)}
 """.strip()
 
+    def _invocar_modelo(self, modelo: str, prompt: str):
+        # En modelos 2.5 Flash desactivamos thinking_budget para que no consuma tokens de salida ni trunque el JSON
+        if "2.5-flash" in modelo and hasattr(types, "ThinkingConfig"):
+            try:
+                cfg = types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    max_output_tokens=32768,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                )
+                return self.client.models.generate_content(model=modelo, contents=prompt, config=cfg)
+            except Exception:
+                pass
+
+        cfg = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            max_output_tokens=32768,
+        )
+        return self.client.models.generate_content(model=modelo, contents=prompt, config=cfg)
+
     def _analizar_lote_con_modelos(self, lote_items, seccion_esperada_por_id, meta_data_por_id):
         prompt = self._construir_prompt(lote_items)
-        modelos = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
-        retryable_markers = ("503", "overloaded", "429", "quota", "resource has been exhausted", "temporarily")
+        modelos = [
+            "gemini-2.5-flash",
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-pro",
+        ]
+        quota_markers = ("429", "resource_exhausted", "quota", "rate limit", "too many requests")
+        non_retryable_markers = ("404", "not_found", "not found", "api_key_invalid", "invalid api key", "permission_denied")
 
         for modelo in modelos:
-            for _ in range(3):
+            for intento in range(1, 4):
                 try:
-                    response = self.client.models.generate_content(
-                        model=modelo,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json"),
-                    )
+                    response = self._invocar_modelo(modelo, prompt)
                     raw = self._limpiar_json_raw(getattr(response, "text", None))
                     if not raw:
                         raise ValueError("Respuesta vacía del modelo")
                     data = json.loads(raw)
-                    return self._normalize_model_output(data, seccion_esperada_por_id)
+                    norm = self._normalize_model_output(data, seccion_esperada_por_id)
+                    total_devueltos = sum(len(norm.get(s, {}).get("items", [])) for s in ("boletin", "diputados", "senado"))
+                    if total_devueltos == 0 and len(lote_items) > 0:
+                        raise ValueError("El modelo devolvió 0 items válidos")
+                    return norm
 
                 except Exception as e:
-                    txt = str(e).lower()
-                    if any(m in txt for m in ["429", "resource_exhausted", "quota", "limit"]):
-                        print(f"   ⏳ Límite de cuota en {modelo}. Esperando 60 segundos...")
+                    err_str = str(e).replace("\n", " ")[:220]
+                    txt = err_str.lower()
+                    print(f"   ⚠️ Error en {modelo} (intento {intento}/3): {type(e).__name__}: {err_str}")
+
+                    if any(m in txt for m in quota_markers):
+                        print(f"   ⏳ Límite de cuota alcanzado en {modelo}. Esperando 60 segundos...")
                         time.sleep(61)
                         continue
 
-                    if any(m in txt for m in retryable_markers):
-                        time.sleep(10)
+                    if any(m in txt for m in non_retryable_markers):
+                        break
+
+                    if intento < 3:
+                        time.sleep(8)
                         continue
                     break
 
-        return self._crear_items_fallback(lote_items, meta_data_por_id)
+        return None
 
     def analizar_proyectos(self, filas_nuevas):
         if not filas_nuevas or not isinstance(filas_nuevas, list):
@@ -301,7 +356,7 @@ Datos a analizar:
             origen = self._coerce_text(self._safe_row_get(fila, 1, "")).strip()
             expediente = self._coerce_text(self._safe_row_get(fila, 2, "")).strip()
             autor = self._coerce_text(self._safe_row_get(fila, 3, "")).strip()
-            contenido_completo = self._coerce_text(self._safe_row_get(fila, 5, ""))
+            contenido_completo = self._coerce_text(self._safe_row_get(fila, 5, ""))[:6500]
 
             if not id_interno:
                 continue
@@ -353,6 +408,22 @@ Datos a analizar:
                 print(f"   🤖 Analizando lote IA {idx_lote}/{len(lotes)} ({len(lote)} ítems)...")
             parcial = self._analizar_lote_con_modelos(lote, seccion_esperada_por_id, meta_data_por_id)
 
+            # Si el lote de 8 falló, reintentar subdividiendo en sub-lotes de 4 ítems
+            if parcial is None and len(lote) > 4:
+                print(f"   🔄 Subdividiendo lote {idx_lote} en mitades para asegurar respuesta...")
+                parcial = {k: {"resumen": "", "items": []} for k in secciones}
+                mitad = len(lote) // 2
+                for sub_lote in (lote[:mitad], lote[mitad:]):
+                    sub_res = self._analizar_lote_con_modelos(sub_lote, seccion_esperada_por_id, meta_data_por_id)
+                    if sub_res is None:
+                        sub_res = self._crear_items_fallback(sub_lote, meta_data_por_id)
+                    for sec in secciones:
+                        if sub_res.get(sec, {}).get("resumen") and not parcial[sec]["resumen"]:
+                            parcial[sec]["resumen"] = sub_res[sec]["resumen"]
+                        parcial[sec]["items"].extend(sub_res.get(sec, {}).get("items", []))
+            elif parcial is None:
+                parcial = self._crear_items_fallback(lote, meta_data_por_id)
+
             # Verificar que ningún ítem del lote haya sido omitido por el modelo
             ids_devueltos = {
                 str(it.get("id_interno") or "").strip()
@@ -371,6 +442,9 @@ Datos a analizar:
                 if res_sec and res_sec not in resumenes_por_seccion[sec]:
                     resumenes_por_seccion[sec].append(res_sec)
                 data_acumulada[sec]["items"].extend(parcial.get(sec, {}).get("items", []))
+
+            if idx_lote < len(lotes):
+                time.sleep(4)
 
         for sec in secciones:
             data_acumulada[sec]["resumen"] = " ".join(resumenes_por_seccion[sec]).strip()
