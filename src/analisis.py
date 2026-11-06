@@ -10,13 +10,21 @@ from reporte import ReporteUI
 
 
 class AnalistaLegislativo:
-    MAX_ITEMS_POR_LOTE = 18
+    MAX_ITEMS_POR_LOTE = 25
 
     def __init__(self):
         api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
         if not api_key:
             print("   ⚠️ Advertencia: GEMINI_API_KEY está vacía o no definida en el entorno.")
-        self.client = genai.Client(api_key=api_key) if api_key else None
+            self.client = None
+        else:
+            try:
+                self.client = genai.Client(
+                    api_key=api_key,
+                    http_options={"api_version": "v1beta"},
+                )
+            except Exception:
+                self.client = genai.Client(api_key=api_key)
         self.ui = ReporteUI(year_footer=datetime.now().year)
 
     def generar_link(self, origen, expediente):
@@ -131,7 +139,6 @@ class AnalistaLegislativo:
         if s.startswith("```"):
             s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
             s = re.sub(r"\s*```$", "", s)
-        # Si el modelo agregó texto antes o después del objeto/lista JSON, recortar a los delimitadores externos
         if s and not (s.startswith("{") or s.startswith("[")):
             idx_obj = s.find("{")
             idx_arr = s.find("[")
@@ -188,7 +195,6 @@ class AnalistaLegislativo:
         if isinstance(data, list):
             items_flat.extend(data)
         elif isinstance(data, dict):
-            # Mapear claves case-insensitive
             lower_map = {str(k).lower().strip(): v for k, v in data.items()}
             for k in secciones:
                 bloque = lower_map.get(k, {})
@@ -249,7 +255,7 @@ REGLA DE CLASIFICACIÓN (OBLIGATORIA):
 - Debes ubicar CADA item en la sección indicada por su "seccion_esperada". Está prohibido mover items a otra sección.
 - Debes devolver TODOS los items recibidos en el input sin omitir ninguno.
 
-SALIDA OBLIGATORIA: Devuelve SOLO un JSON válido, sin texto adicional, con esta estructura EXACTA:
+SALIDA OBLIGATORIA: Devuelve SOLO un JSON válido, sin texto adicional ni bloques markdown, con esta estructura EXACTA:
 {{
   "boletin": {{"resumen": "...", "items": []}},
   "diputados": {{"resumen": "...", "items": []}},
@@ -278,37 +284,39 @@ Datos a analizar:
 """.strip()
 
     def _invocar_modelo(self, modelo: str, prompt: str):
-        # En modelos 2.5 Flash desactivamos thinking_budget para que no consuma tokens de salida ni trunque el JSON
-        if "2.5-flash" in modelo and hasattr(types, "ThinkingConfig"):
-            try:
-                cfg = types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    max_output_tokens=32768,
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                )
-                return self.client.models.generate_content(model=modelo, contents=prompt, config=cfg)
-            except Exception:
-                pass
-
-        cfg = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            max_output_tokens=32768,
-        )
-        return self.client.models.generate_content(model=modelo, contents=prompt, config=cfg)
+        try:
+            cfg = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                max_output_tokens=32768,
+            )
+            return self.client.models.generate_content(model=modelo, contents=prompt, config=cfg)
+        except Exception as e:
+            msg = str(e).lower()
+            # Si el endpoint rechaza JSON mode (p. ej. si el SDK fuerza v1 en lugar de v1beta),
+            # reintentar inmediatamente sin response_mime_type ya que el prompt exige JSON puro.
+            if "json mode is not enabled" in msg or "invalid_argument" in msg:
+                cfg_plain = types.GenerateContentConfig(max_output_tokens=32768)
+                return self.client.models.generate_content(model=modelo, contents=prompt, config=cfg_plain)
+            raise
 
     def _analizar_lote_con_modelos(self, lote_items, seccion_esperada_por_id, meta_data_por_id):
         prompt = self._construir_prompt(lote_items)
+        # Solo modelos Flash con cuota activa en Free Tier (rotando entre modelos antes de esperar)
         modelos = [
             "gemini-2.5-flash",
-            "gemini-3-flash-preview",
             "gemini-2.5-flash-lite",
-            "gemini-2.5-pro",
+            "gemini-3-flash-preview",
         ]
         quota_markers = ("429", "resource_exhausted", "quota", "rate limit", "too many requests")
         non_retryable_markers = ("404", "not_found", "not found", "api_key_invalid", "invalid api key", "permission_denied")
 
-        for modelo in modelos:
-            for intento in range(1, 4):
+        modelos_descartados = set()
+
+        for ronda in (1, 2):
+            hubo_error_cuota = False
+            for modelo in modelos:
+                if modelo in modelos_descartados:
+                    continue
                 try:
                     response = self._invocar_modelo(modelo, prompt)
                     raw = self._limpiar_json_raw(getattr(response, "text", None))
@@ -316,7 +324,10 @@ Datos a analizar:
                         raise ValueError("Respuesta vacía del modelo")
                     data = json.loads(raw)
                     norm = self._normalize_model_output(data, seccion_esperada_por_id)
-                    total_devueltos = sum(len(norm.get(s, {}).get("items", [])) for s in ("boletin", "diputados", "senado"))
+                    total_devueltos = sum(
+                        len(norm.get(s, {}).get("items", []))
+                        for s in ("boletin", "diputados", "senado")
+                    )
                     if total_devueltos == 0 and len(lote_items) > 0:
                         raise ValueError("El modelo devolvió 0 items válidos")
                     return norm
@@ -324,20 +335,20 @@ Datos a analizar:
                 except Exception as e:
                     err_str = str(e).replace("\n", " ")[:220]
                     txt = err_str.lower()
-                    print(f"   ⚠️ Error en {modelo} (intento {intento}/3): {type(e).__name__}: {err_str}")
-
-                    if any(m in txt for m in quota_markers):
-                        print(f"   ⏳ Límite de cuota alcanzado en {modelo}. Esperando 60 segundos...")
-                        time.sleep(61)
-                        continue
+                    print(f"   ⚠️ Error en {modelo} (ronda {ronda}/2): {type(e).__name__}: {err_str}")
 
                     if any(m in txt for m in non_retryable_markers):
-                        break
-
-                    if intento < 3:
-                        time.sleep(8)
+                        modelos_descartados.add(modelo)
                         continue
-                    break
+
+                    if any(m in txt for m in quota_markers):
+                        hubo_error_cuota = True
+                        # Pasamos de inmediato al siguiente modelo (que tiene cuota independiente)
+                        continue
+
+            if ronda == 1 and hubo_error_cuota:
+                print("   ⏳ Esperando 35s para renovar ventana de cuota por minuto antes del reintento...")
+                time.sleep(35)
 
         return None
 
@@ -355,8 +366,8 @@ Datos a analizar:
             id_interno = self._normalize_id(self._safe_row_get(fila, 0, ""))
             origen = self._coerce_text(self._safe_row_get(fila, 1, "")).strip()
             expediente = self._coerce_text(self._safe_row_get(fila, 2, "")).strip()
-            autor = self._coerce_text(self._safe_row_get(fila, 3, "")).strip()
-            contenido_completo = self._coerce_text(self._safe_row_get(fila, 5, ""))[:6500]
+            autor = self._coerce_text(self._safe_row_get(fila, el_idx := 3, "")).strip()
+            contenido_completo = self._coerce_text(self._safe_row_get(fila, 5, ""))[:3000]
 
             if not id_interno:
                 continue
@@ -408,20 +419,7 @@ Datos a analizar:
                 print(f"   🤖 Analizando lote IA {idx_lote}/{len(lotes)} ({len(lote)} ítems)...")
             parcial = self._analizar_lote_con_modelos(lote, seccion_esperada_por_id, meta_data_por_id)
 
-            # Si el lote de 8 falló, reintentar subdividiendo en sub-lotes de 4 ítems
-            if parcial is None and len(lote) > 4:
-                print(f"   🔄 Subdividiendo lote {idx_lote} en mitades para asegurar respuesta...")
-                parcial = {k: {"resumen": "", "items": []} for k in secciones}
-                mitad = len(lote) // 2
-                for sub_lote in (lote[:mitad], lote[mitad:]):
-                    sub_res = self._analizar_lote_con_modelos(sub_lote, seccion_esperada_por_id, meta_data_por_id)
-                    if sub_res is None:
-                        sub_res = self._crear_items_fallback(sub_lote, meta_data_por_id)
-                    for sec in secciones:
-                        if sub_res.get(sec, {}).get("resumen") and not parcial[sec]["resumen"]:
-                            parcial[sec]["resumen"] = sub_res[sec]["resumen"]
-                        parcial[sec]["items"].extend(sub_res.get(sec, {}).get("items", []))
-            elif parcial is None:
+            if parcial is None:
                 parcial = self._crear_items_fallback(lote, meta_data_por_id)
 
             # Verificar que ningún ítem del lote haya sido omitido por el modelo
@@ -444,7 +442,7 @@ Datos a analizar:
                 data_acumulada[sec]["items"].extend(parcial.get(sec, {}).get("items", []))
 
             if idx_lote < len(lotes):
-                time.sleep(4)
+                time.sleep(5)
 
         for sec in secciones:
             data_acumulada[sec]["resumen"] = " ".join(resumenes_por_seccion[sec]).strip()
